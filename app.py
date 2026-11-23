@@ -1,6 +1,5 @@
 import streamlit as st
 import json, os, hashlib, base64, io
-import urllib.request, urllib.parse
 from datetime import datetime
 from PIL import Image, ImageEnhance, ImageFilter
 from groq import Groq
@@ -37,40 +36,33 @@ def save_user_notebooks(username, notebooks):
         users.get(username).update({"notebooks": notebooks})
     save_json(USERS_FILE, users)
 
-@st.cache_resource
-def get_ocr_engine():
-    from rapidocr_onnxruntime import RapidOCR
-    return RapidOCR()
-
-def enhance_and_read_image(uploaded_file):
-    import numpy as np
-
+def read_uploaded_photo(uploaded_file):
     img = Image.open(uploaded_file).convert("RGB")
     w, h = img.size
     if w < 1400:
         scale = 1400 / w
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Contrast(img).enhance(1.5)
-    img = ImageEnhance.Sharpness(img).enhance(1.9)
+    img = ImageEnhance.Contrast(img).enhance(1.45)
+    img = ImageEnhance.Sharpness(img).enhance(1.8)
     img = img.filter(ImageFilter.DETAIL)
 
-    ocr = get_ocr_engine()
-    result, _ = ocr(np.array(img))
-    if not result:
-        raise Exception("Не удалось разглядеть текст на фото. Попробуй сфотографировать ближе и при хорошем свете.")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    lines = map(lambda item: item[1], result)
-    raw_text = "\n".join(lines)
-
-    # Нейросеть аккуратно исправляет случайные опечатки распознавания и склеивает разорванные строчки
-    clean_resp = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
+    resp = client.chat.completions.create(
+        model="meta-llama/llama-4-maverick-17b-128e-instruct",
         messages=(
-            {"role": "system", "content": "Ты корректор текста. Тебе дают сырой текст, распознанный с фотографии учебника. Исправь случайные опечатки распознавания и аккуратно собери текст в нормальные абзацы, сохраняя весь смысл, даты и формулы слово в слово. Верни ТОЛЬКО исправленный текст без своих комментариев."},
-            {"role": "user", "content": raw_text}
+            {
+                "role": "user",
+                "content": (
+                    {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы. Не добавляй никаких комментариев — верни ТОЛЬКО текст."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                )
+            },
         )
     )
-    return clean_resp.choices.pop(0).message.content.strip()
+    return resp.choices.pop(0).message.content.strip()
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = load_json(SESSION_FILE, {}).get("username")
@@ -204,8 +196,7 @@ st.markdown(f"""
     .stApp {{ background-color: {bg_color}; color: #1A1D26; }}
     .block-container {{ max-width: 840px !important; padding-top: 2.5rem !important; padding-bottom: 4rem !important; }}
     p, label, .stMarkdown p, .stRadio label p, .stSelectbox label p, .stSlider label p, .stTextArea label p, .stTextInput label p {{
-        font-size: 20px !important;
-        line-height: 1.65 !important;
+        font-size: 20px !important; line-height: 1.65 !important;
     }}
     div[role="radiogroup"] label {{
         background-color: #FFFFFF; padding: 14px 18px !important; border-radius: 14px !important;
@@ -213,9 +204,7 @@ st.markdown(f"""
         box-shadow: 0 3px 10px rgba(0,0,0,0.02); transition: 0.2s;
     }}
     div[role="radiogroup"] label:hover {{ border-color: {accent_color} !important; transform: translateX(4px); }}
-    textarea, input[type="text"] {{
-        font-size: 19px !important; border-radius: 14px !important; padding: 14px !important;
-    }}
+    textarea, input[type="text"] {{ font-size: 19px !important; border-radius: 14px !important; padding: 14px !important; }}
     .hero-box {{
         background: linear-gradient(135deg, {accent_color} 0%, {accent_light} 100%);
         padding: 38px 34px; border-radius: 26px; color: white; margin-bottom: 32px;
@@ -245,7 +234,6 @@ st.markdown(f"""
         padding: 30px; text-align: center; margin-top: 24px; box-shadow: 0 12px 30px rgba(224, 36, 36, 0.12);
     }}
     .grade-number {{ font-size: 80px !important; font-weight: 900 !important; color: #E02424; line-height: 1.1 !important; }}
-
     @keyframes shimmer {{ 0% {{ background-position: 0% 50%; }} 50% {{ background-position: 100% 50%; }} 100% {{ background-position: 0% 50%; }} }}
     section.main div.stButton > button {{
         background: linear-gradient(270deg, {accent_color}, {accent_light}, {accent_color});
@@ -253,28 +241,14 @@ st.markdown(f"""
         font-size: 20px !important; font-weight: 800 !important; padding: 14px 24px !important;
         border-radius: 16px !important; border: none !important; width: 100%; margin-top: 8px !important;
     }}
-
     section[data-testid="stSidebar"] div.stButton > button {{
-        background: transparent !important;
-        animation: none !important;
-        color: #1A1D26 !important;
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        padding: 8px 12px !important;
-        border-radius: 10px !important;
-        border: none !important;
-        box-shadow: none !important;
-        text-align: left !important;
-        justify-content: flex-start !important;
-        margin-top: 2px !important;
-        margin-bottom: 2px !important;
-        width: 100%;
-        transition: background-color 0.15s ease;
+        background: transparent !important; animation: none !important; color: #1A1D26 !important;
+        font-size: 18px !important; font-weight: 600 !important; padding: 8px 12px !important;
+        border-radius: 10px !important; border: none !important; box-shadow: none !important;
+        text-align: left !important; justify-content: flex-start !important;
+        margin-top: 2px !important; margin-bottom: 2px !important; width: 100%;
     }}
-    section[data-testid="stSidebar"] div.stButton > button:hover {{
-        background-color: rgba(0, 0, 0, 0.06) !important;
-        transform: none !important;
-    }}
+    section[data-testid="stSidebar"] div.stButton > button:hover {{ background-color: rgba(0, 0, 0, 0.06) !important; }}
     </style>
 """, unsafe_allow_html=True)
 if st.session_state.active_notebook:
@@ -306,13 +280,13 @@ st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
         <div class="hero-title">StudyBox</div>
-        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или сфотографируй страницу учебника — я переведу её в понятный конспект и проверю знания тестом.</div>
+        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или загрузи фото страницы учебника — я переведу её в понятный конспект и проверю знания тестом.</div>
     </div>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="section-title">1. Исходный текст из учебника</div>', unsafe_allow_html=True)
 
-tab_txt, tab_img, tab_cam = st.tabs(("Вставить текст", "Загрузить фото страницы", "Сфотографировать камерой"))
+tab_txt, tab_img = st.tabs(("Вставить текст", "Загрузить фото страницы"))
 
 with tab_img:
     photo_file = st.file_uploader("Выбери фото страницы учебника (JPG или PNG):", type=("jpg", "jpeg", "png"))
@@ -321,21 +295,10 @@ with tab_img:
         if st.button("Распознать текст с фото", key="ocr_upload_btn"):
             with st.spinner("Улучшаю чёткость фото и читаю текст..."):
                 try:
-                    st.session_state.source_text = enhance_and_read_image(photo_file)
-                    st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
+                    st.session_state.source_text = read_uploaded_photo(photo_file)
+                    st.success("Текст успешно распознан! Перейди на вкладку «Вставить текст» — он уже там.")
                 except Exception as e:
                     st.error(f"Не удалось прочитать фото: {e}")
-
-with tab_cam:
-    cam_photo = st.camera_input("Наведи камеру на страницу учебника и сделай снимок:")
-    if cam_photo is not None:
-        if st.button("Распознать текст со снимка", key="ocr_cam_btn"):
-            with st.spinner("Улучшаю чёткость снимка и читаю текст..."):
-                try:
-                    st.session_state.source_text = enhance_and_read_image(cam_photo)
-                    st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
-                except Exception as e:
-                    st.error(f"Не удалось прочитать снимок: {e}")
 
 with tab_txt:
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
