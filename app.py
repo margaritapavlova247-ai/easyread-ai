@@ -255,7 +255,17 @@ st.markdown(f"""
     }}
     </style>
 """, unsafe_allow_html=True)
-    saved_notes = notebooks.get(nb_title, ())
+# === РЕЖИМ 1: ПРОСМОТР ВЫБРАННОЙ ТЕТРАДИ ===
+if st.session_state.active_notebook:
+    nb_title = st.session_state.active_notebook
+    st.markdown(f"""
+        <div class="hero-box" translate="no">
+            <div class="hero-badge">Личная тетрадь</div>
+            <div class="hero-title">{nb_title}</div>
+            <div class="hero-sub">Здесь хранятся все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы открыть её.</div>
+        </div>
+    """, unsafe_allow_html=True)
+saved_notes = notebooks.get(nb_title, ())
     if not saved_notes:
         st.info("В этой тетради пока пусто. Перейди на «Новый конспект (Главная)», создай материал и нажми «Сохранить в тетрадь».")
     else:
