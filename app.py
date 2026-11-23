@@ -107,17 +107,6 @@ if not st.session_state.current_user:
     with c3:
         if st.button("Apple"): st.session_state.current_user = "Apple_User"; save_json(SESSION_FILE, {"username": "Apple_User"}); st.rerun()
     st.stop()
-
-# === РЕЖИМ 1: ПРОСМОТР ВЫБРАННОЙ ТЕТРАДИ ===
-if st.session_state.active_notebook:
-    nb_title = st.session_state.active_notebook
-    st.markdown(f"""
-        <div class="hero-box" translate="no">
-            <div class="hero-badge">Личная тетрадь</div>
-            <div class="hero-title">{nb_title}</div>
-            <div class="hero-sub">Здесь хранятся все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы открыть её.</div>
-        </div>
-    """, unsafe_allow_html=True)
 notebooks = get_user_notebooks(st.session_state.current_user)
 
 with st.sidebar:
@@ -136,7 +125,6 @@ with st.sidebar:
 
     st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-    # Одна полосочка: заголовок "Мои тетради" слева и аккуратный "+" справа с подсказкой
     col_title, col_plus = st.columns((4, 1))
     with col_title:
         st.markdown("<div style='font-size:20px; font-weight:800; padding-top:4px;'>Мои тетради</div>", unsafe_allow_html=True)
@@ -158,7 +146,6 @@ with st.sidebar:
                 elif clean_name in notebooks:
                     st.warning("Такая тетрадь уже есть.")
 
-    # Чистый список тетрадей друг за другом в стиле ChatGPT
     for nb_name in tuple(notebooks.keys()):
         notes_count = len(notebooks.get(nb_name, ()))
         label_text = f"{nb_name}  ({notes_count})" if notes_count > 0 else nb_name
@@ -222,7 +209,6 @@ st.markdown(f"""
     }}
     .grade-number {{ font-size: 80px !important; font-weight: 900 !important; color: #E02424; line-height: 1.1 !important; }}
 
-    /* Главные кнопки по центру экрана — красивые, с переливом */
     @keyframes shimmer {{ 0% {{ background-position: 0% 50%; }} 50% {{ background-position: 100% 50%; }} 100% {{ background-position: 0% 50%; }} }}
     section.main div.stButton > button {{
         background: linear-gradient(270deg, {accent_color}, {accent_light}, {accent_color});
@@ -231,7 +217,6 @@ st.markdown(f"""
         border-radius: 16px !important; border: none !important; width: 100%; margin-top: 8px !important;
     }}
 
-    /* Боковая панель — строгий, чистый стиль в духе ChatGPT (без переливов!) */
     section[data-testid="stSidebar"] div.stButton > button {{
         background: transparent !important;
         animation: none !important;
@@ -255,7 +240,6 @@ st.markdown(f"""
     }}
     </style>
 """, unsafe_allow_html=True)
-# === РЕЖИМ 1: ПРОСМОТР ВЫБРАННОЙ ТЕТРАДИ ===
 if st.session_state.active_notebook:
     nb_title = st.session_state.active_notebook
     st.markdown(f"""
@@ -265,9 +249,10 @@ if st.session_state.active_notebook:
             <div class="hero-sub">Здесь хранятся все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы открыть её.</div>
         </div>
     """, unsafe_allow_html=True)
-saved_notes = notebooks.get(nb_title, ())
+
+    saved_notes = notebooks.get(nb_title, ())
     if not saved_notes:
-        st.info("В этой тетради пока пусто. Перейди на «Новый конспект (Главная)», создай материал и нажми «Сохранить в тетрадь».")
+        st.info("В этой тетради пока пусто. Перейди на «Новый конспект», создай материал и нажми «Сохранить в тетрадь».")
     else:
         for idx, note in enumerate(saved_notes):
             with st.expander(f"{note.get('topic', 'Без названия')} — {note.get('date', '')}"):
@@ -280,7 +265,6 @@ saved_notes = notebooks.get(nb_title, ())
                     st.rerun()
     st.stop()
 
-# === РЕЖИМ 2: ГЛАВНАЯ СТРАНИЦА (СОЗДАНИЕ КОНСПЕКТА И ТЕСТА) ===
 st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
@@ -333,7 +317,6 @@ if st.session_state.adapted_text:
     with st.container(border=True):
         st.markdown(st.session_state.adapted_text)
 
-    # Форма сохранения конспекта в выбранную тетрадь
     with st.expander("Сохранить этот конспект в тетрадь"):
         with st.form("save_note_form"):
             note_topic = st.text_input("Название темы:", placeholder="Например: Штефан чел Маре")
