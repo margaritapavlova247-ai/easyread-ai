@@ -1,6 +1,8 @@
 import streamlit as st
-import json, os, hashlib, base64
+import json, os, hashlib, base64, io
+import urllib.request, urllib.parse
 from datetime import datetime
+from PIL import Image, ImageEnhance, ImageFilter
 from groq import Groq
 
 api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
@@ -25,7 +27,7 @@ def save_json(path, data):
 def get_user_notebooks(username):
     users = load_json(USERS_FILE, {})
     user_data = users.get(username, {})
-    return user_data.get("notebooks", {"Общая тетрадь": []})
+    return user_data.get("notebooks", {"Общая тетрадь": list()})
 
 def save_user_notebooks(username, notebooks):
     users = load_json(USERS_FILE, {})
@@ -35,29 +37,56 @@ def save_user_notebooks(username, notebooks):
         users.get(username).update({"notebooks": notebooks})
     save_json(USERS_FILE, users)
 
-def extract_text_from_image(uploaded_file):
-    bytes_data = uploaded_file.getvalue()
-    b64_img = base64.b64encode(bytes_data).decode("utf-8")
-    mime_type = uploaded_file.type or "image/jpeg"
+def enhance_and_read_image(uploaded_file):
+    img = Image.open(uploaded_file).convert("RGB")
+    w, h = img.size
+    if w < 1400:
+        scale = 1400 / w
+        img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+    img = ImageEnhance.Contrast(img).enhance(1.45)
+    img = ImageEnhance.Sharpness(img).enhance(1.8)
+    img = img.filter(ImageFilter.DETAIL)
 
-    # Автоматически находим актуальную зрительную модель в Groq
-    available = [m.id for m in client.models.list().data]
-    vision_candidates = [m for m in available if "vision" in m.lower() or "scout" in m.lower() or "maverick" in m.lower()]
-    chosen_model = vision_candidates[0] if vision_candidates else "llama-3.2-90b-vision-preview"
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    resp = client.chat.completions.create(
-        model=chosen_model,
-        messages=(
-            {
-                "role": "user",
-                "content": (
-                    {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы и знаки препинания. Не добавляй никаких своих комментариев, вступлений или смайликов — верни ТОЛЬКО сам текст со страницы."},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_img}"}}
+    try:
+        all_ids = map(lambda m: m.id, client.models.list().data)
+        vision_list = list(filter(lambda x: any(w in x.lower() for w in ("vision", "scout", "maverick", "vl")), all_ids))
+        if vision_list:
+            chosen = vision_list.pop(0)
+            resp = client.chat.completions.create(
+                model=chosen,
+                messages=(
+                    {
+                        "role": "user",
+                        "content": (
+                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы. Не добавляй никаких комментариев — верни ТОЛЬКО текст."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                        )
+                    },
                 )
-            },
-        )
-    )
-    return resp.choices.pop(0).message.content.strip()
+            )
+            return resp.choices.pop(0).message.content.strip()
+    except Exception:
+        pass
+
+    data = urllib.parse.urlencode({
+        "apikey": "helloworld",
+        "base64Image": f"data:image/jpeg;base64,{b64_img}",
+        "language": "rus",
+        "OCREngine": "2"
+    }).encode("utf-8")
+    req = urllib.request.Request("https://ocr.space", data=data)
+    with urllib.request.urlopen(req, timeout=25) as response:
+        res = json.loads(response.read().decode("utf-8"))
+        parsed = res.get("ParsedResults")
+        if parsed:
+            text_out = parsed.pop(0).get("ParsedText", "").strip()
+            if text_out:
+                return text_out
+    raise Exception("Не удалось разглядеть текст. Попробуй сфотографировать ближе и при хорошем освещении.")
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = load_json(SESSION_FILE, {}).get("username")
@@ -117,7 +146,7 @@ if not st.session_state.current_user:
                 elif r_nick in users: st.error("Этот никнейм уже занят.")
                 elif r_pwd != r_pwd2: st.error("Пароли не совпадают.")
                 else:
-                    users.update({r_nick: {"password": hash_pass(r_pwd), "notebooks": {"Общая тетрадь": []}}})
+                    users.update({r_nick: {"password": hash_pass(r_pwd), "notebooks": {"Общая тетрадь": list()}}})
                     save_json(USERS_FILE, users)
                     st.session_state.current_user = r_nick
                     if r_rem: save_json(SESSION_FILE, {"username": r_nick})
@@ -133,7 +162,6 @@ if not st.session_state.current_user:
         if st.button("Apple"): st.session_state.current_user = "Apple_User"; save_json(SESSION_FILE, {"username": "Apple_User"}); st.rerun()
     st.stop()
 notebooks = get_user_notebooks(st.session_state.current_user)
-
 with st.sidebar:
     st.markdown(f"<div style='font-size:22px; font-weight:800; margin-bottom:8px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
     if st.button("Выйти из аккаунта", key="logout_btn"):
@@ -163,7 +191,7 @@ with st.sidebar:
             if st.form_submit_button("Создать"):
                 clean_name = new_nb_name.strip()
                 if clean_name and clean_name not in notebooks:
-                    notebooks.update({clean_name: []})
+                    notebooks.update({clean_name: list()})
                     save_user_notebooks(st.session_state.current_user, notebooks)
                     st.session_state.show_new_nb_form = False
                     st.session_state.active_notebook = clean_name
@@ -307,9 +335,9 @@ with tab_img:
     if photo_file is not None:
         st.image(photo_file, caption="Загруженная страница", use_container_width=True)
         if st.button("Распознать текст с фото", key="ocr_upload_btn"):
-            with st.spinner("Внимательно читаю страницу учебника..."):
+            with st.spinner("Улучшаю чёткость фото и читаю текст..."):
                 try:
-                    st.session_state.source_text = extract_text_from_image(photo_file)
+                    st.session_state.source_text = enhance_and_read_image(photo_file)
                     st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
                 except Exception as e:
                     st.error(f"Не удалось прочитать фото: {e}")
@@ -318,9 +346,9 @@ with tab_cam:
     cam_photo = st.camera_input("Наведи камеру на страницу учебника и сделай снимок:")
     if cam_photo is not None:
         if st.button("Распознать текст со снимка", key="ocr_cam_btn"):
-            with st.spinner("Внимательно читаю снимок..."):
+            with st.spinner("Улучшаю чёткость снимка и читаю текст..."):
                 try:
-                    st.session_state.source_text = extract_text_from_image(cam_photo)
+                    st.session_state.source_text = enhance_and_read_image(cam_photo)
                     st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
                 except Exception as e:
                     st.error(f"Не удалось прочитать снимок: {e}")
@@ -328,7 +356,7 @@ with tab_cam:
 with tab_txt:
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
     st.session_state.source_text = text
-    st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
 mode = st.radio(
     "Формат:",
     (
@@ -372,7 +400,7 @@ if st.session_state.adapted_text:
 
     with st.expander("Сохранить этот конспект в тетрадь"):
         with st.form("save_note_form"):
-            note_topic = st.text_input("Название темы:", placeholder="Например: Рельеф Евразии")
+            note_topic = st.text_input("Название темы:", placeholder="Например: Геометрия треугольника")
             target_nb = st.selectbox("В какую тетрадь сохранить:", tuple(notebooks.keys()))
             if st.form_submit_button("Сохранить конспект"):
                 clean_topic = note_topic.strip() if note_topic.strip() else "Конспект без названия"
