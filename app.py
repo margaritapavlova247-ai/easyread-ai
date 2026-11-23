@@ -39,8 +39,14 @@ def extract_text_from_image(uploaded_file):
     bytes_data = uploaded_file.getvalue()
     b64_img = base64.b64encode(bytes_data).decode("utf-8")
     mime_type = uploaded_file.type or "image/jpeg"
+
+    # Автоматически находим актуальную зрительную модель в Groq
+    available = [m.id for m in client.models.list().data]
+    vision_candidates = [m for m in available if "vision" in m.lower() or "scout" in m.lower() or "maverick" in m.lower()]
+    chosen_model = vision_candidates[0] if vision_candidates else "llama-3.2-90b-vision-preview"
+
     resp = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        model=chosen_model,
         messages=(
             {
                 "role": "user",
