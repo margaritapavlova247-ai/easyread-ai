@@ -37,56 +37,40 @@ def save_user_notebooks(username, notebooks):
         users.get(username).update({"notebooks": notebooks})
     save_json(USERS_FILE, users)
 
+@st.cache_resource
+def get_ocr_engine():
+    from rapidocr_onnxruntime import RapidOCR
+    return RapidOCR()
+
 def enhance_and_read_image(uploaded_file):
+    import numpy as np
+
     img = Image.open(uploaded_file).convert("RGB")
     w, h = img.size
     if w < 1400:
         scale = 1400 / w
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Contrast(img).enhance(1.45)
-    img = ImageEnhance.Sharpness(img).enhance(1.8)
+    img = ImageEnhance.Contrast(img).enhance(1.5)
+    img = ImageEnhance.Sharpness(img).enhance(1.9)
     img = img.filter(ImageFilter.DETAIL)
 
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=92)
-    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+    ocr = get_ocr_engine()
+    result, _ = ocr(np.array(img))
+    if not result:
+        raise Exception("Не удалось разглядеть текст на фото. Попробуй сфотографировать ближе и при хорошем свете.")
 
-    try:
-        all_ids = map(lambda m: m.id, client.models.list().data)
-        vision_list = list(filter(lambda x: any(w in x.lower() for w in ("vision", "scout", "maverick", "vl")), all_ids))
-        if vision_list:
-            chosen = vision_list.pop(0)
-            resp = client.chat.completions.create(
-                model=chosen,
-                messages=(
-                    {
-                        "role": "user",
-                        "content": (
-                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы. Не добавляй никаких комментариев — верни ТОЛЬКО текст."},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                        )
-                    },
-                )
-            )
-            return resp.choices.pop(0).message.content.strip()
-    except Exception:
-        pass
+    lines = map(lambda item: item[1], result)
+    raw_text = "\n".join(lines)
 
-    data = urllib.parse.urlencode({
-        "apikey": "helloworld",
-        "base64Image": f"data:image/jpeg;base64,{b64_img}",
-        "language": "rus",
-        "OCREngine": "2"
-    }).encode("utf-8")
-    req = urllib.request.Request("https://ocr.space", data=data)
-    with urllib.request.urlopen(req, timeout=25) as response:
-        res = json.loads(response.read().decode("utf-8"))
-        parsed = res.get("ParsedResults")
-        if parsed:
-            text_out = parsed.pop(0).get("ParsedText", "").strip()
-            if text_out:
-                return text_out
-    raise Exception("Не удалось разглядеть текст. Попробуй сфотографировать ближе и при хорошем освещении.")
+    # Нейросеть аккуратно исправляет случайные опечатки распознавания и склеивает разорванные строчки
+    clean_resp = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=(
+            {"role": "system", "content": "Ты корректор текста. Тебе дают сырой текст, распознанный с фотографии учебника. Исправь случайные опечатки распознавания и аккуратно собери текст в нормальные абзацы, сохраняя весь смысл, даты и формулы слово в слово. Верни ТОЛЬКО исправленный текст без своих комментариев."},
+            {"role": "user", "content": raw_text}
+        )
+    )
+    return clean_resp.choices.pop(0).message.content.strip()
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = load_json(SESSION_FILE, {}).get("username")
