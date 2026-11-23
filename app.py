@@ -1,5 +1,5 @@
 import streamlit as st
-import json, os, hashlib
+import json, os, hashlib, base64
 from datetime import datetime
 from groq import Groq
 
@@ -35,10 +35,29 @@ def save_user_notebooks(username, notebooks):
         users.get(username).update({"notebooks": notebooks})
     save_json(USERS_FILE, users)
 
+def extract_text_from_image(uploaded_file):
+    bytes_data = uploaded_file.getvalue()
+    b64_img = base64.b64encode(bytes_data).decode("utf-8")
+    mime_type = uploaded_file.type or "image/jpeg"
+    resp = client.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=(
+            {
+                "role": "user",
+                "content": (
+                    {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы и знаки препинания. Не добавляй никаких своих комментариев, вступлений или смайликов — верни ТОЛЬКО сам текст со страницы."},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_img}"}}
+                )
+            },
+        )
+    )
+    return resp.choices.pop(0).message.content.strip()
+
 if "current_user" not in st.session_state:
     st.session_state.current_user = load_json(SESSION_FILE, {}).get("username")
 
 defaults = (
+    ("source_text", ""),
     ("adapted_text", ""),
     ("quiz_data", None),
     ("show_quiz", False),
@@ -134,7 +153,7 @@ with st.sidebar:
 
     if st.session_state.show_new_nb_form:
         with st.form("new_nb_form"):
-            new_nb_name = st.text_input("Название тетради:", placeholder="Например: Биология")
+            new_nb_name = st.text_input("Название тетради:", placeholder="Например: География")
             if st.form_submit_button("Создать"):
                 clean_name = new_nb_name.strip()
                 if clean_name and clean_name not in notebooks:
@@ -269,14 +288,40 @@ st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
         <div class="hero-title">StudyBox</div>
-        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь сложный параграф, создай конспект, проверь себя тестом и сохрани тему в свою тетрадь.</div>
+        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или сфотографируй страницу учебника — я переведу её в понятный конспект и проверю знания тестом.</div>
     </div>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="section-title">1. Исходный текст из учебника</div>', unsafe_allow_html=True)
-text = st.text_area("Поле для текста:", height=180, placeholder="Вставь сюда любой параграф по истории, биологии, литературе или физике...", label_visibility="collapsed")
 
-st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
+tab_txt, tab_img, tab_cam = st.tabs(("Вставить текст", "Загрузить фото страницы", "Сфотографировать камерой"))
+
+with tab_img:
+    photo_file = st.file_uploader("Выбери фото страницы учебника (JPG или PNG):", type=("jpg", "jpeg", "png"))
+    if photo_file is not None:
+        st.image(photo_file, caption="Загруженная страница", use_container_width=True)
+        if st.button("Распознать текст с фото", key="ocr_upload_btn"):
+            with st.spinner("Внимательно читаю страницу учебника..."):
+                try:
+                    st.session_state.source_text = extract_text_from_image(photo_file)
+                    st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
+                except Exception as e:
+                    st.error(f"Не удалось прочитать фото: {e}")
+
+with tab_cam:
+    cam_photo = st.camera_input("Наведи камеру на страницу учебника и сделай снимок:")
+    if cam_photo is not None:
+        if st.button("Распознать текст со снимка", key="ocr_cam_btn"):
+            with st.spinner("Внимательно читаю снимок..."):
+                try:
+                    st.session_state.source_text = extract_text_from_image(cam_photo)
+                    st.success("Текст успешно распознан! Он уже появился во вкладке «Вставить текст» — выбери формат ниже и нажми «Адаптировать текст».")
+                except Exception as e:
+                    st.error(f"Не удалось прочитать снимок: {e}")
+
+with tab_txt:
+    text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
+    st.session_state.source_text = textst.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
 mode = st.radio(
     "Формат:",
     (
@@ -288,12 +333,13 @@ mode = st.radio(
 )
 
 if st.button("Адаптировать текст", key="adapt_btn"):
-    if text.strip():
+    current_text = st.session_state.source_text.strip()
+    if current_text:
         with st.spinner("Перестраиваю текст..."):
             if "Упрощённый" in mode:
                 task = "Перепиши текст на русском языке максимально просто и понятно: разбей на короткие абзацы по 2 предложения, разделяй абзацы пустой строкой, убери сложные слова и воду, выдели **жирным шрифтом** ключевые слова. Не используй смайлики и эмодзи."
             elif "Главная суть" in mode:
-                task = """Выпиши из этого текста на русском языке ТОЛЬКО самую главную суть: все важные даты, имена, термины и определения.
+                task = """Выпиши из этого текста на русском языке ТОЛЬКО самую главную суть: все важные даты, имена, формулы, термины и определения.
                 Строгие правила оформления:
                 1. Никаких смайликов и эмодзи.
                 2. Каждый термин или дата ДОЛЖНЫ начинаться с нового абзаца (обязательно ставь пустую строку между пунктами).
@@ -304,13 +350,13 @@ if st.button("Адаптировать текст", key="adapt_btn"):
 
             response = client.chat.completions.create(
                 model="openai/gpt-oss-120b",
-                messages=({"role": "system", "content": "Ты помощник в учёбе. Работай строго по тексту пользователя. Никогда не используй эмодзи и смайлики."}, {"role": "user", "content": f"{task}\n\nТекст:\n{text}"})
+                messages=({"role": "system", "content": "Ты помощник в учёбе. Работай строго по тексту пользователя. Никогда не используй эмодзи и смайлики."}, {"role": "user", "content": f"{task}\n\nТекст:\n{current_text}"})
             )
             st.session_state.adapted_text = response.choices.pop(0).message.content
             st.session_state.show_quiz = False
             st.session_state.grade_result = None
     else:
-        st.warning("Сначала вставь текст в поле выше.")
+        st.warning("Сначала вставь текст или распознай его с фотографии выше.")
 
 if st.session_state.adapted_text:
     st.markdown('<div class="section-title">3. Готовый материал</div>', unsafe_allow_html=True)
@@ -319,7 +365,7 @@ if st.session_state.adapted_text:
 
     with st.expander("Сохранить этот конспект в тетрадь"):
         with st.form("save_note_form"):
-            note_topic = st.text_input("Название темы:", placeholder="Например: Штефан чел Маре")
+            note_topic = st.text_input("Название темы:", placeholder="Например: Рельеф Евразии")
             target_nb = st.selectbox("В какую тетрадь сохранить:", tuple(notebooks.keys()))
             if st.form_submit_button("Сохранить конспект"):
                 clean_topic = note_topic.strip() if note_topic.strip() else "Конспект без названия"
@@ -334,10 +380,11 @@ if st.session_state.adapted_text:
                 st.success(f"Конспект «{clean_topic}» сохранён в тетрадь «{target_nb}»!")
 
     if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
+        current_text = st.session_state.source_text.strip()
         with st.spinner("Составляю контрольную работу..."):
             quiz_prompt = f"""Составь контрольную на русском из 5 заданий по тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
             {{"q1": {{"question": "Вопрос 1?", "options": ["А", "Б", "В"]}}, "q2": {{"question": "Вопрос 2?", "options": ["А", "Б", "В"]}}, "q3": {{"question": "Вопрос 3?", "options": ["А", "Б", "В"]}}, "q4": {{"title": "Задание 4: Соедини пару", "left_1": "Элемент 1", "left_2": "Элемент 2", "right_options": ["Пара 1", "Пара 2"]}}, "q5": "Задание 5 (Мини-эссе): Перескажи тему в 2-3 предложениях."}}
-            Текст: {text}"""
+            Текст: {current_text}"""
             q_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": quiz_prompt},))
             raw_json = q_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
             try:
@@ -360,8 +407,9 @@ if st.session_state.show_quiz and st.session_state.quiz_data:
         with c2: match2 = st.selectbox(qd.get('q4').get('left_2'), qd.get('q4').get('right_options'), key="m2")
         essay = st.text_area(f"5. {qd.get('q5')}", height=110)
         if st.form_submit_button("Отправить на проверку"):
+            current_text = st.session_state.source_text.strip()
             with st.spinner("Проверяю ответы..."):
-                check_prompt = f"""Проверь контрольную по тексту: {text}. Ответы: 1){ans1}, 2){ans2}, 3){ans3}, 4){qd.get('q4').get('left_1')}={match1}, {qd.get('q4').get('left_2')}={match2}, 5)Эссе: {essay}. Без смайликов.
+                check_prompt = f"""Проверь контрольную по тексту: {current_text}. Ответы: 1){ans1}, 2){ans2}, 3){ans3}, 4){qd.get('q4').get('left_1')}={match1}, {qd.get('q4').get('left_2')}={match2}, 5)Эссе: {essay}. Без смайликов.
                 Верни СТРОГО JSON без ```json: {{"grade": 9, "feedback": "Разбор по пунктам на русском с пустыми строками между абзацами"}}"""
                 c_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": check_prompt},))
                 raw_check = c_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
