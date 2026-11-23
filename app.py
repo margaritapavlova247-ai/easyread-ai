@@ -107,25 +107,42 @@ if not st.session_state.current_user:
     with c3:
         if st.button("Apple"): st.session_state.current_user = "Apple_User"; save_json(SESSION_FILE, {"username": "Apple_User"}); st.rerun()
     st.stop()
+
+# === РЕЖИМ 1: ПРОСМОТР ВЫБРАННОЙ ТЕТРАДИ ===
+if st.session_state.active_notebook:
+    nb_title = st.session_state.active_notebook
+    st.markdown(f"""
+        <div class="hero-box" translate="no">
+            <div class="hero-badge">Личная тетрадь</div>
+            <div class="hero-title">{nb_title}</div>
+            <div class="hero-sub">Здесь хранятся все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы открыть её.</div>
+        </div>
+    """, unsafe_allow_html=True)
 notebooks = get_user_notebooks(st.session_state.current_user)
 
 with st.sidebar:
-    st.markdown(f"<div style='font-size:24px; font-weight:800; margin-bottom:10px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:22px; font-weight:800; margin-bottom:8px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
     if st.button("Выйти из аккаунта", key="logout_btn"):
         st.session_state.current_user = None
         st.session_state.active_notebook = None
         if os.path.exists(SESSION_FILE): os.remove(SESSION_FILE)
         st.rerun()
 
-    st.markdown("<hr style='margin:20px 0;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px; font-weight:800; margin-bottom:10px;'>Мои тетради</div>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:16px 0;'>", unsafe_allow_html=True)
 
-    if st.button("Новый конспект (Главная)", key="home_btn"):
+    if st.button("Новый конспект", key="home_btn"):
         st.session_state.active_notebook = None
         st.rerun()
 
-    if st.button("+ Создать новую тетрадь", key="add_nb_btn"):
-        st.session_state.show_new_nb_form = not st.session_state.show_new_nb_form
+    st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+    # Одна полосочка: заголовок "Мои тетради" слева и аккуратный "+" справа с подсказкой
+    col_title, col_plus = st.columns((4, 1))
+    with col_title:
+        st.markdown("<div style='font-size:20px; font-weight:800; padding-top:4px;'>Мои тетради</div>", unsafe_allow_html=True)
+    with col_plus:
+        if st.button("+", key="add_nb_btn", help="Создать новую тетрадь"):
+            st.session_state.show_new_nb_form = not st.session_state.show_new_nb_form
 
     if st.session_state.show_new_nb_form:
         with st.form("new_nb_form"):
@@ -141,15 +158,16 @@ with st.sidebar:
                 elif clean_name in notebooks:
                     st.warning("Такая тетрадь уже есть.")
 
-    st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+    # Чистый список тетрадей друг за другом в стиле ChatGPT
     for nb_name in tuple(notebooks.keys()):
         notes_count = len(notebooks.get(nb_name, ()))
-        if st.button(f"Тетрадь: {nb_name} ({notes_count})", key=f"nb_btn_{nb_name}"):
+        label_text = f"{nb_name}  ({notes_count})" if notes_count > 0 else nb_name
+        if st.button(label_text, key=f"nb_btn_{nb_name}"):
             st.session_state.active_notebook = nb_name
             st.rerun()
 
     st.markdown("<hr style='margin:20px 0;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px; font-weight:800; margin-bottom:10px;'>Оформление страницы</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:20px; font-weight:800; margin-bottom:8px;'>Оформление страницы</div>", unsafe_allow_html=True)
     theme = st.selectbox("Оттенок фона:", ("Мягкий кремовый", "Нежно-мятный", "Спокойный голубой"))
     font_size = st.slider("Размер текста:", min_value=18, max_value=28, value=22)
 
@@ -203,26 +221,40 @@ st.markdown(f"""
         padding: 30px; text-align: center; margin-top: 24px; box-shadow: 0 12px 30px rgba(224, 36, 36, 0.12);
     }}
     .grade-number {{ font-size: 80px !important; font-weight: 900 !important; color: #E02424; line-height: 1.1 !important; }}
+
+    /* Главные кнопки по центру экрана — красивые, с переливом */
     @keyframes shimmer {{ 0% {{ background-position: 0% 50%; }} 50% {{ background-position: 100% 50%; }} 100% {{ background-position: 0% 50%; }} }}
-    div.stButton > button {{
+    section.main div.stButton > button {{
         background: linear-gradient(270deg, {accent_color}, {accent_light}, {accent_color});
         background-size: 200% 200%; animation: shimmer 5s ease infinite; color: white !important;
         font-size: 20px !important; font-weight: 800 !important; padding: 14px 24px !important;
         border-radius: 16px !important; border: none !important; width: 100%; margin-top: 8px !important;
     }}
+
+    /* Боковая панель — строгий, чистый стиль в духе ChatGPT (без переливов!) */
+    section[data-testid="stSidebar"] div.stButton > button {{
+        background: transparent !important;
+        animation: none !important;
+        color: #1A1D26 !important;
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        padding: 8px 12px !important;
+        border-radius: 10px !important;
+        border: none !important;
+        box-shadow: none !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        margin-top: 2px !important;
+        margin-bottom: 2px !important;
+        width: 100%;
+        transition: background-color 0.15s ease;
+    }}
+    section[data-testid="stSidebar"] div.stButton > button:hover {{
+        background-color: rgba(0, 0, 0, 0.06) !important;
+        transform: none !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
-# === РЕЖИМ 1: ПРОСМОТР ВЫБРАННОЙ ТЕТРАДИ ===
-if st.session_state.active_notebook:
-    nb_title = st.session_state.active_notebook
-    st.markdown(f"""
-        <div class="hero-box" translate="no">
-            <div class="hero-badge">Личная тетрадь</div>
-            <div class="hero-title">{nb_title}</div>
-            <div class="hero-sub">Здесь хранятся все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы открыть её.</div>
-        </div>
-    """, unsafe_allow_html=True)
-
     saved_notes = notebooks.get(nb_title, ())
     if not saved_notes:
         st.info("В этой тетради пока пусто. Перейди на «Новый конспект (Главная)», создай материал и нажми «Сохранить в тетрадь».")
