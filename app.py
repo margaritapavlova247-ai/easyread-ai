@@ -5,7 +5,7 @@ from groq import Groq
 # Вставь свой ключ gsk_... внутрь кавычек:
 client = Groq(api_key=st.secrets.get("GROQ_API_KEY", ""))
 
-st.set_page_config(page_title="EasyRead AI", page_icon="📖", layout="centered")
+st.set_page_config(page_title="StudyBox", page_icon="📖", layout="centered")
 
 USERS_FILE, SESSION_FILE = "users_db.json", "saved_session.json"
 
@@ -47,7 +47,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.current_user:
-    st.markdown('<div class="auth-header" translate="no"><h1>EasyRead AI</h1><p>Личный кабинет ученика — войди или создай аккаунт</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-header" translate="no"><h1>StudyBox</h1><p>Личный кабинет ученика — войди или создай аккаунт</p></div>', unsafe_allow_html=True)
     tab_login, tab_reg = st.tabs(("Вход в аккаунт", "Регистрация"))
 
     with tab_login:
@@ -188,7 +188,7 @@ st.markdown(f"""
 st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
-        <div class="hero-title">EasyRead AI</div>
+        <div class="hero-title">StudyBox</div>
         <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь сложный параграф из учебника, и я оформлю его так, чтобы было легко читать и запоминать.</div>
     </div>
 """, unsafe_allow_html=True)
