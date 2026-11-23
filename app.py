@@ -321,7 +321,8 @@ with tab_cam:
 
 with tab_txt:
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
-    st.session_state.source_text = textst.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
+    st.session_state.source_text = text
+    st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
 mode = st.radio(
     "Формат:",
     (
