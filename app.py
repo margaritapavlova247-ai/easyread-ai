@@ -373,8 +373,7 @@ if st.session_state.adapted_text:
                 notebooks.update({target_nb: nb_list})
                 save_user_notebooks(st.session_state.current_user, notebooks)
                 st.success(f"Конспект «{clean_topic}» сохранён в тетрадь «{target_nb}»!")
-
-            if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
+    if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
         saved_topic_text = st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
         with st.spinner("Составляю контрольную работу..."):
             quiz_prompt = f"""Составь контрольную на русском языке из 5 заданий строго по этому тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
