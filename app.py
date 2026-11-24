@@ -351,3 +351,123 @@ with tab_img:
 with tab_txt:
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
     st.session_state.source_text = text
+st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
+mode = st.radio(
+    "Формат:",
+    (
+        "Упрощённый текст — короткие абзацы и выделение главного",
+        "Главная суть — только даты, имена, термины и определения",
+        "Объяснение простыми словами — с примером из жизни"
+    ),
+    label_visibility="collapsed"
+)
+
+if st.button("Адаптировать текст", key="adapt_btn"):
+    current_text = st.session_state.source_text.strip()
+    if current_text:
+        with st.spinner("Перестраиваю текст..."):
+            if "Упрощённый" in mode:
+                task = "Перепиши текст на русском языке максимально просто и понятно: разбей на короткие абзацы по 2 предложения, разделяй абзацы пустой строкой, убери сложные слова и воду, выдели **жирным шрифтом** ключевые слова. Не используй смайлики и эмодзи."
+            elif "Главная суть" in mode:
+                task = """Выпиши из этого текста на русском языке ТОЛЬКО самую главную суть: все важные даты, имена, формулы, термины и определения.
+                Строгие правила оформления:
+                1. Никаких смайликов и эмодзи.
+                2. Каждый термин или дата ДОЛЖНЫ начинаться с нового абзаца (обязательно ставь пустую строку между пунктами).
+                3. Формат каждого абзаца: **Дата или термин** — чёткое объяснение в 1-2 предложения.
+                4. Никаких вступлений и заключений, только сам список."""
+            else:
+                task = "Объясни этот текст на русском языке максимально простыми и понятными словами, добавь 1 яркий пример из жизни. Разделяй абзацы пустой строкой. Не используй смайлики и эмодзи."
+
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=({"role": "system", "content": "Ты помощник в учёбе. Работай строго по тексту пользователя. Никогда не используй эмодзи и смайлики."}, {"role": "user", "content": f"{task}\n\nТекст:\n{current_text}"})
+            )
+            st.session_state.adapted_text = response.choices.pop(0).message.content
+            st.session_state.show_quiz = False
+            st.session_state.grade_result = None
+    else:
+        st.warning("Сначала вставь текст или распознай его с фотографии выше.")
+
+if st.session_state.adapted_text:
+    st.markdown('<div class="section-title">3. Готовый материал</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(st.session_state.adapted_text)
+
+    with st.expander("Сохранить этот конспект в тетрадь"):
+        with st.form("save_note_form"):
+            note_topic = st.text_input("Название темы:", placeholder="Например: Геометрия треугольника")
+            target_nb = st.selectbox("В какую тетрадь сохранить:", tuple(notebooks.keys()))
+            if st.form_submit_button("Сохранить конспект"):
+                clean_topic = note_topic.strip() if note_topic.strip() else "Конспект без названия"
+                nb_list = list(notebooks.get(target_nb, ()))
+                nb_list.append({
+                    "topic": clean_topic,
+                    "content": st.session_state.adapted_text,
+                    "date": datetime.now().strftime("%d.%m.%Y")
+                })
+                notebooks.update({target_nb: nb_list})
+                save_user_notebooks(st.session_state.current_user, notebooks)
+                st.success(f"Конспект «{clean_topic}» сохранён в тетрадь «{target_nb}»!")
+
+    if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
+        saved_topic_text = st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
+        with st.spinner("Составляю контрольную работу..."):
+            quiz_prompt = f"""Составь контрольную на русском языке из 5 заданий строго по этому тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
+            {{"q1": {{"question": "Вопрос 1?", "options": ["А", "Б", "В"]}}, "q2": {{"question": "Вопрос 2?", "options": ["А", "Б", "В"]}}, "q3": {{"question": "Вопрос 3?", "options": ["А", "Б", "В"]}}, "q4": {{"title": "Задание 4: Соедини пару", "left_1": "Элемент 1", "left_2": "Элемент 2", "right_options": ["Пара 1", "Пара 2"]}}, "q5": "Задание 5 (Мини-эссе): Перескажи тему в 2-3 предложениях."}}
+            Текст: {saved_topic_text}"""
+            q_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": quiz_prompt},))
+            raw_json = q_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
+            try:
+                parsed_q = json.loads(raw_json)
+                parsed_q.update({"_topic_text": saved_topic_text})
+                st.session_state.quiz_data = parsed_q
+                st.session_state.show_quiz = True
+                st.session_state.grade_result = None
+            except Exception:
+                st.error("Нажми на кнопку «Создать контрольный тест» ещё раз.")
+
+if st.session_state.show_quiz and st.session_state.quiz_data:
+    qd = st.session_state.quiz_data
+    st.markdown('<div class="a4-paper"><h2 style="margin:0; font-weight:900;">КОНТРОЛЬНАЯ РАБОТА</h2><p style="margin-top:6px; color:#64748B;">Ответь на вопросы, соедини пары и напиши мини-эссе</p></div>', unsafe_allow_html=True)
+    with st.form("control_work_form"):
+        ans1 = st.radio(f"1. {qd.get('q1').get('question')}", qd.get('q1').get('options'), key="r1")
+        ans2 = st.radio(f"2. {qd.get('q2').get('question')}", qd.get('q2').get('options'), key="r2")
+        ans3 = st.radio(f"3. {qd.get('q3').get('question')}", qd.get('q3').get('options'), key="r3")
+        st.markdown(f"**{qd.get('q4').get('title')}**")
+        c1, c2 = st.columns(2)
+        with c1: match1 = st.selectbox(qd.get('q4').get('left_1'), qd.get('q4').get('right_options'), key="m1")
+        with c2: match2 = st.selectbox(qd.get('q4').get('left_2'), qd.get('q4').get('right_options'), key="m2")
+        essay = st.text_area(f"5. {qd.get('q5')}", height=110)
+        if st.form_submit_button("Отправить на проверку"):
+            topic_for_check = qd.get("_topic_text") or st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
+            with st.spinner("Внимательно проверяю каждый твой ответ по теме..."):
+                check_prompt = f"""Ты строгий, но справедливый школьный учитель. Проверь контрольную работу ученика СТРОГО по данному ниже исходному тексту и заданным вопросам. Не придумывай факты не из текста. Без смайликов.
+
+ИСХОДНЫЙ ТЕКСТ ТЕМЫ:
+{topic_for_check}
+
+ВОПРОСЫ И ОТВЕТЫ УЧЕНИКА:
+1. Вопрос: {qd.get('q1').get('question')} | Ответ ученика: {ans1}
+2. Вопрос: {qd.get('q2').get('question')} | Ответ ученика: {ans2}
+3. Вопрос: {qd.get('q3').get('question')} | Ответ ученика: {ans3}
+4. Соединить пары: {qd.get('q4').get('left_1')} -> ученик выбрал «{match1}»; {qd.get('q4').get('left_2')} -> ученик выбрал «{match2}»
+5. {qd.get('q5')} | Мини-эссе ученика: «{essay}»
+
+Оцени работу по 10-балльной шкале (от 1 до 10) и разбери каждый из 5 пунктов отдельно (верно или нет, и почему).
+Верни СТРОГО валидный JSON без ```json: {{"grade": 9, "feedback": "Подробный разбор каждого из 5 заданий на русском языке с пустыми строками между пунктами"}}"""
+                c_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": check_prompt},))
+                raw_check = c_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
+                try:
+                    st.session_state.grade_result = json.loads(raw_check)
+                except Exception:
+                    st.error("Ошибка проверки, нажми на кнопку «Отправить на проверку» ещё раз.")
+
+if st.session_state.grade_result:
+    gr = st.session_state.grade_result
+    st.markdown(f'<div class="grade-box"><div style="color:#C53030; font-weight:800; font-size:20px;">ТВОЯ ОЦЕНКА ЗА РАБОТУ</div><div class="grade-number">{gr.get("grade")} / 10</div></div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(gr.get("feedback"))
+    if st.button("Окей, закрыть разбор", key="close_grade_btn"):
+        st.session_state.show_quiz = False
+        st.session_state.grade_result = None
+        st.rerun()
