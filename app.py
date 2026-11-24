@@ -1,40 +1,60 @@
 import streamlit as st
 import json, os, hashlib, base64, io
+import urllib.request, urllib.parse
 from datetime import datetime
 from PIL import Image, ImageEnhance, ImageFilter
 from groq import Groq
 
-api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
-client = Groq(api_key=api_key)
+GROQ_KEY = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
+SB_URL = st.secrets.get("SUPABASE_URL", "").rstrip("/") if hasattr(st, "secrets") else ""
+SB_KEY = st.secrets.get("SUPABASE_KEY", "") if hasattr(st, "secrets") else ""
+OR_KEY = st.secrets.get("OPENROUTER_API_KEY", "") if hasattr(st, "secrets") else ""
+
+client = Groq(api_key=GROQ_KEY)
 
 st.set_page_config(page_title="StudyBox", page_icon="📖", layout="centered")
 
-USERS_FILE, SESSION_FILE = "users_db.json", "saved_session.json"
+def hash_pass(p):
+    return hashlib.sha256(p.encode()).hexdigest()
 
-def hash_pass(p): return hashlib.sha256(p.encode()).hexdigest()
+def sb_request(method, endpoint, data=None):
+    url = f"{SB_URL}/rest/v1/{endpoint}"
+    headers = {
+        "apikey": SB_KEY,
+        "Authorization": f"Bearer {SB_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+    body = json.dumps(data).encode("utf-8") if data is not None else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read().decode("utf-8")
+        return json.loads(raw) if raw else []
 
-def load_json(path, default):
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f: return json.load(f)
-        except Exception: return default
-    return default
+def get_user_record(username):
+    safe_u = urllib.parse.quote(username)
+    rows = sb_request("GET", f"studybox_users?username=eq.{safe_u}&select=*")
+    return rows.pop(0) if rows else None
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
+def register_user_db(username, password):
+    if get_user_record(username):
+        return False
+    sb_request("POST", "studybox_users", {
+        "username": username,
+        "password_hash": hash_pass(password),
+        "notebooks": {"Общая тетрадь": []}
+    })
+    return True
 
 def get_user_notebooks(username):
-    users = load_json(USERS_FILE, {})
-    user_data = users.get(username, {})
-    return user_data.get("notebooks", {"Общая тетрадь": list()})
+    rec = get_user_record(username)
+    if rec and isinstance(rec.get("notebooks"), dict):
+        return rec.get("notebooks")
+    return {"Общая тетрадь": []}
 
 def save_user_notebooks(username, notebooks):
-    users = load_json(USERS_FILE, {})
-    if username not in users:
-        users.update({username: {"password": "", "notebooks": notebooks}})
-    else:
-        users.get(username).update({"notebooks": notebooks})
-    save_json(USERS_FILE, users)
+    safe_u = urllib.parse.quote(username)
+    sb_request("PATCH", f"studybox_users?username=eq.{safe_u}", {"notebooks": notebooks})
 
 def read_uploaded_photo(uploaded_file):
     img = Image.open(uploaded_file).convert("RGB")
@@ -50,24 +70,52 @@ def read_uploaded_photo(uploaded_file):
     img.save(buf, format="JPEG", quality=92)
     b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    resp = client.chat.completions.create(
-        model="meta-llama/llama-4-maverick-17b-128e-instruct",
-        messages=(
-            {
-                "role": "user",
-                "content": (
-                    {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово, сохраняя абзацы. Не добавляй никаких комментариев — верни ТОЛЬКО текст."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                )
-            },
-        )
-    )
-    return resp.choices.pop(0).message.content.strip()
+    if not OR_KEY:
+        raise Exception("Добавь OPENROUTER_API_KEY в Secrets в настройках Streamlit!")
 
-if "current_user" not in st.session_state:
-    st.session_state.current_user = load_json(SESSION_FILE, {}).get("username")
+    vision_models = (
+        "google/gemini-2.0-flash-exp:free",
+        "qwen/qwen2.5-vl-72b-instruct:free",
+        "meta-llama/llama-3.2-11b-vision-instruct:free",
+        "google/gemma-3-27b-it:free"
+    )
+    last_err = ""
+    for model_name in vision_models:
+        try:
+            payload = json.dumps({
+                "model": model_name,
+                "messages": (
+                    {
+                        "role": "user",
+                        "content": (
+                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово на языке оригинала (румынский, русский или английский). Если на странице есть рисунки, схемы, графики или геометрические фигуры с подписями, кратко опиши их смысл в скобках в нужном месте. Сохраняй абзацы. Не добавляй вступлений — верни ТОЛЬКО текст со страницы."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                        )
+                    },
+                )
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://openrouter.ai",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {OR_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://streamlit.app",
+                    "X-Title": "StudyBox"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=35) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+                choices = res.get("choices")
+                if choices:
+                    return choices.pop(0).get("message").get("content", "").strip()
+        except Exception as e:
+            last_err = str(e)
+            continue
+    raise Exception(f"Не удалось прочитать фото ({last_err}). Попробуй сделать снимок ближе и светлее.")
 
 defaults = (
+    ("current_user", None),
     ("source_text", ""),
     ("adapted_text", ""),
     ("quiz_data", None),
@@ -77,7 +125,8 @@ defaults = (
     ("show_new_nb_form", False)
 )
 for key, val in defaults:
-    if key not in st.session_state: st.session_state[key] = val
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 st.markdown("""
     <style>
@@ -94,48 +143,45 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.current_user:
-    st.markdown('<div class="auth-header" translate="no"><h1>StudyBox</h1><p>Личный кабинет ученика — войди или создай аккаунт</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-header" translate="no"><h1>StudyBox</h1><p>Личный кабинет ученика — твои тетради сохраняются навсегда</p></div>', unsafe_allow_html=True)
     tab_login, tab_reg = st.tabs(("Вход в аккаунт", "Регистрация"))
 
     with tab_login:
         with st.form("login_form"):
             nick = st.text_input("Никнейм:")
             pwd = st.text_input("Пароль:", type="password")
-            rem = st.checkbox("Запомнить меня на этом устройстве", value=True)
             if st.form_submit_button("Войти в кабинет"):
-                users = load_json(USERS_FILE, {})
-                if nick in users and users.get(nick).get("password") == hash_pass(pwd):
-                    st.session_state.current_user = nick
-                    if rem: save_json(SESSION_FILE, {"username": nick})
-                    st.rerun()
-                else: st.error("Неверный никнейм или пароль.")
+                clean_nick = nick.strip()
+                try:
+                    rec = get_user_record(clean_nick)
+                    if rec and rec.get("password_hash") == hash_pass(pwd):
+                        st.session_state.current_user = clean_nick
+                        st.rerun()
+                    else:
+                        st.error("Неверный никнейм или пароль.")
+                except Exception as e:
+                    st.error(f"Ошибка подключения к базе: {e}")
 
     with tab_reg:
         with st.form("reg_form"):
             r_nick = st.text_input("Придумай никнейм:")
             r_pwd = st.text_input("Придумай пароль (от 4 символов):", type="password")
             r_pwd2 = st.text_input("Повтори пароль:", type="password")
-            r_rem = st.checkbox("Запомнить меня сразу", value=True)
             if st.form_submit_button("Создать аккаунт"):
-                users = load_json(USERS_FILE, {})
-                if not r_nick.strip() or len(r_pwd) < 4: st.warning("Введи никнейм и пароль (минимум 4 символа).")
-                elif r_nick in users: st.error("Этот никнейм уже занят.")
-                elif r_pwd != r_pwd2: st.error("Пароли не совпадают.")
+                clean_r = r_nick.strip()
+                if not clean_r or len(r_pwd) < 4:
+                    st.warning("Введи никнейм и пароль (минимум 4 символа).")
+                elif r_pwd != r_pwd2:
+                    st.error("Пароли не совпадают.")
                 else:
-                    users.update({r_nick: {"password": hash_pass(r_pwd), "notebooks": {"Общая тетрадь": list()}}})
-                    save_json(USERS_FILE, users)
-                    st.session_state.current_user = r_nick
-                    if r_rem: save_json(SESSION_FILE, {"username": r_nick})
-                    st.rerun()
-
-    st.markdown("---")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("Google"): st.session_state.current_user = "Google_User"; save_json(SESSION_FILE, {"username": "Google_User"}); st.rerun()
-    with c2:
-        if st.button("Facebook"): st.session_state.current_user = "Facebook_User"; save_json(SESSION_FILE, {"username": "Facebook_User"}); st.rerun()
-    with c3:
-        if st.button("Apple"): st.session_state.current_user = "Apple_User"; save_json(SESSION_FILE, {"username": "Apple_User"}); st.rerun()
+                    try:
+                        if register_user_db(clean_r, r_pwd):
+                            st.session_state.current_user = clean_r
+                            st.rerun()
+                        else:
+                            st.error("Этот никнейм уже занят.")
+                    except Exception as e:
+                        st.error(f"Ошибка регистрации: {e}")
     st.stop()
 notebooks = get_user_notebooks(st.session_state.current_user)
 with st.sidebar:
@@ -143,7 +189,8 @@ with st.sidebar:
     if st.button("Выйти из аккаунта", key="logout_btn"):
         st.session_state.current_user = None
         st.session_state.active_notebook = None
-        if os.path.exists(SESSION_FILE): os.remove(SESSION_FILE)
+        st.session_state.source_text = ""
+        st.session_state.adapted_text = ""
         st.rerun()
 
     st.markdown("<hr style='margin:16px 0;'>", unsafe_allow_html=True)
@@ -280,23 +327,23 @@ st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
         <div class="hero-title">StudyBox</div>
-        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или загрузи фото страницы учебника — я переведу её в понятный конспект и проверю знания тестом.</div>
+        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или загрузи фото страницы учебника — я переведу её в понятный конспект, разберу схемы и проверю знания тестом.</div>
     </div>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="section-title">1. Исходный текст из учебника</div>', unsafe_allow_html=True)
 
-tab_txt, tab_img = st.tabs(("Вставить текст", "Загрузить фото страницы"))
+tab_txt, tab_img = st.tabs(("Вставить текст", "Загрузить или сфоткать страницу"))
 
 with tab_img:
-    photo_file = st.file_uploader("Выбери фото страницы учебника (JPG или PNG):", type=("jpg", "jpeg", "png"))
+    photo_file = st.file_uploader("Выбери фото страницы учебника или сделай снимок на телефоне:", type=("jpg", "jpeg", "png"))
     if photo_file is not None:
         st.image(photo_file, caption="Загруженная страница", use_container_width=True)
-        if st.button("Распознать текст с фото", key="ocr_upload_btn"):
-            with st.spinner("Улучшаю чёткость фото и читаю текст..."):
+        if st.button("Распознать текст и рисунки с фото", key="ocr_upload_btn"):
+            with st.spinner("Улучшаю чёткость фото и читаю страницу..."):
                 try:
                     st.session_state.source_text = read_uploaded_photo(photo_file)
-                    st.success("Текст успешно распознан! Перейди на вкладку «Вставить текст» — он уже там.")
+                    st.success("Страница успешно прочитана! Перейди на вкладку «Вставить текст» — текст уже там.")
                 except Exception as e:
                     st.error(f"Не удалось прочитать фото: {e}")
 
