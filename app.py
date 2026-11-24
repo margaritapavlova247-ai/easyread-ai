@@ -374,16 +374,18 @@ if st.session_state.adapted_text:
                 save_user_notebooks(st.session_state.current_user, notebooks)
                 st.success(f"Конспект «{clean_topic}» сохранён в тетрадь «{target_nb}»!")
 
-    if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
-        current_text = st.session_state.source_text.strip()
+        if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
+        saved_topic_text = st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
         with st.spinner("Составляю контрольную работу..."):
-            quiz_prompt = f"""Составь контрольную на русском из 5 заданий по тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
+            quiz_prompt = f"""Составь контрольную на русском языке из 5 заданий строго по этому тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
             {{"q1": {{"question": "Вопрос 1?", "options": ["А", "Б", "В"]}}, "q2": {{"question": "Вопрос 2?", "options": ["А", "Б", "В"]}}, "q3": {{"question": "Вопрос 3?", "options": ["А", "Б", "В"]}}, "q4": {{"title": "Задание 4: Соедини пару", "left_1": "Элемент 1", "left_2": "Элемент 2", "right_options": ["Пара 1", "Пара 2"]}}, "q5": "Задание 5 (Мини-эссе): Перескажи тему в 2-3 предложениях."}}
-            Текст: {current_text}"""
+            Текст: {saved_topic_text}"""
             q_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": quiz_prompt},))
             raw_json = q_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
             try:
-                st.session_state.quiz_data = json.loads(raw_json)
+                parsed_q = json.loads(raw_json)
+                parsed_q.update({"_topic_text": saved_topic_text})
+                st.session_state.quiz_data = parsed_q
                 st.session_state.show_quiz = True
                 st.session_state.grade_result = None
             except Exception:
@@ -402,14 +404,28 @@ if st.session_state.show_quiz and st.session_state.quiz_data:
         with c2: match2 = st.selectbox(qd.get('q4').get('left_2'), qd.get('q4').get('right_options'), key="m2")
         essay = st.text_area(f"5. {qd.get('q5')}", height=110)
         if st.form_submit_button("Отправить на проверку"):
-            current_text = st.session_state.source_text.strip()
-            with st.spinner("Проверяю ответы..."):
-                check_prompt = f"""Проверь контрольную по тексту: {current_text}. Ответы: 1){ans1}, 2){ans2}, 3){ans3}, 4){qd.get('q4').get('left_1')}={match1}, {qd.get('q4').get('left_2')}={match2}, 5)Эссе: {essay}. Без смайликов.
-                Верни СТРОГО JSON без ```json: {{"grade": 9, "feedback": "Разбор по пунктам на русском с пустыми строками между абзацами"}}"""
+            topic_for_check = qd.get("_topic_text") or st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
+            with st.spinner("Внимательно проверяю каждый твой ответ по теме..."):
+                check_prompt = f"""Ты строгий, но справедливый школьный учитель. Проверь контрольную работу ученика СТРОГО по данному ниже исходному тексту и заданным вопросам. Не придумывай факты не из текста. Без смайликов.
+
+ИСХОДНЫЙ ТЕКСТ ТЕМЫ:
+{topic_for_check}
+
+ВОПРОСЫ И ОТВЕТЫ УЧЕНИКА:
+1. Вопрос: {qd.get('q1').get('question')} | Ответ ученика: {ans1}
+2. Вопрос: {qd.get('q2').get('question')} | Ответ ученика: {ans2}
+3. Вопрос: {qd.get('q3').get('question')} | Ответ ученика: {ans3}
+4. Соединить пары: {qd.get('q4').get('left_1')} -> ученик выбрал «{match1}»; {qd.get('q4').get('left_2')} -> ученик выбрал «{match2}»
+5. {qd.get('q5')} | Мини-эссе ученика: «{essay}»
+
+Оцени работу по 10-балльной шкале (от 1 до 10) и разбери каждый из 5 пунктов отдельно (верно или нет, и почему).
+Верни СТРОГО валидный JSON без ```json: {{"grade": 9, "feedback": "Подробный разбор каждого из 5 заданий на русском языке с пустыми строками между пунктами"}}"""
                 c_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": check_prompt},))
                 raw_check = c_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
-                try: st.session_state.grade_result = json.loads(raw_check)
-                except Exception: st.error("Ошибка проверки, нажми ещё раз.")
+                try:
+                    st.session_state.grade_result = json.loads(raw_check)
+                except Exception:
+                    st.error("Ошибка проверки, нажми на кнопку «Отправить на проверку» ещё раз.")
 
 if st.session_state.grade_result:
     gr = st.session_state.grade_result
