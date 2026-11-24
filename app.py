@@ -1,14 +1,13 @@
 import streamlit as st
-import json, os, hashlib, base64, io
+import json, os, hashlib
 import urllib.request, urllib.parse
 from datetime import datetime
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 from groq import Groq
 
 GROQ_KEY = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
 SB_URL = st.secrets.get("SUPABASE_URL", "").rstrip("/") if hasattr(st, "secrets") else ""
 SB_KEY = st.secrets.get("SUPABASE_KEY", "") if hasattr(st, "secrets") else ""
-OR_KEY = st.secrets.get("OPENROUTER_API_KEY", "") if hasattr(st, "secrets") else ""
 
 client = Groq(api_key=GROQ_KEY)
 
@@ -70,9 +69,8 @@ def read_uploaded_photo(uploaded_file):
 
     raw_text = pytesseract.image_to_string(img, lang="rus+ron+eng").strip()
     if not raw_text:
-        raise Exception("На фото не удалось найти текст. Попробуй сфотографировать ближе и при хорошем свете.")
+        raise Exception("На фото не удалось найти печатный текст. Попробуй сфотографировать страницу учебника ближе и при хорошем свете.")
 
-    # Твоя основная рабочая нейросеть Groq исправляет любые опечатки сканера и собирает красивый текст
     clean_resp = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=(
@@ -81,6 +79,54 @@ def read_uploaded_photo(uploaded_file):
         )
     )
     return clean_resp.choices.pop(0).message.content.strip()
+
+defaults = (
+    ("current_user", None),
+    ("source_text", ""),
+    ("adapted_text", ""),
+    ("quiz_data", None),
+    ("show_quiz", False),
+    ("grade_result", None),
+    ("active_notebook", None),
+    ("show_new_nb_form", False)
+)
+for key, val in defaults:
+    if key not in st.session_state:
+        st.session_state[key] = val
+
+st.markdown("""
+    <style>
+    @import url('https://googleapis.com');
+    html, body, p, div, label, input, textarea, select, button { font-family: 'Nunito', sans-serif !important; }
+    .auth-header {
+        background: linear-gradient(135deg, #5B4BC4 0%, #8E7FF5 100%);
+        padding: 40px 32px; border-radius: 26px; color: white; text-align: center;
+        margin-bottom: 30px; box-shadow: 0 16px 40px rgba(91, 75, 196, 0.22);
+    }
+    .auth-header h1 { font-size: 38px !important; font-weight: 900 !important; margin: 0 !important; }
+    .auth-header p { font-size: 20px !important; margin-top: 12px !important; opacity: 0.95; }
+    </style>
+""", unsafe_allow_html=True)
+
+if not st.session_state.current_user:
+    st.markdown('<div class="auth-header" translate="no"><h1>StudyBox</h1><p>Личный кабинет ученика — твои тетради сохраняются навсегда</p></div>', unsafe_allow_html=True)
+    tab_login, tab_reg = st.tabs(("Вход в аккаунт", "Регистрация"))
+
+    with tab_login:
+        with st.form("login_form"):
+            nick = st.text_input("Никнейм:")
+            pwd = st.text_input("Пароль:", type="password")
+            if st.form_submit_button("Войти в кабинет"):
+                clean_nick = nick.strip()
+                try:
+                    rec = get_user_record(clean_nick)
+                    if rec and rec.get("password_hash") == hash_pass(pwd):
+                        st.session_state.current_user = clean_nick
+                        st.rerun()
+                    else:
+                        st.error("Неверный никнейм или пароль.")
+                except Exception as e:
+                    st.error(f"Ошибка подключения к базе: {e}")
 
     with tab_reg:
         with st.form("reg_form"):
@@ -247,7 +293,7 @@ st.markdown(f"""
     <div class="hero-box" translate="no">
         <div class="hero-badge">Умный помощник для учёбы</div>
         <div class="hero-title">StudyBox</div>
-        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или загрузи фото страницы учебника — я переведу её в понятный конспект, разберу схемы и проверю знания тестом.</div>
+        <div class="hero-sub">Привет, <b>{st.session_state.current_user}</b>! Вставь текст или загрузи фото страницы учебника — я переведу её в понятный конспект и проверю знания тестом.</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -259,7 +305,7 @@ with tab_img:
     photo_file = st.file_uploader("Выбери фото страницы учебника или сделай снимок на телефоне:", type=("jpg", "jpeg", "png"))
     if photo_file is not None:
         st.image(photo_file, caption="Загруженная страница", use_container_width=True)
-        if st.button("Распознать текст и рисунки с фото", key="ocr_upload_btn"):
+        if st.button("Распознать текст с фото", key="ocr_upload_btn"):
             with st.spinner("Улучшаю чёткость фото и читаю страницу..."):
                 try:
                     st.session_state.source_text = read_uploaded_photo(photo_file)
