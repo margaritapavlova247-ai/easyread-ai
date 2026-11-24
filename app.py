@@ -57,110 +57,30 @@ def save_user_notebooks(username, notebooks):
     sb_request("PATCH", f"studybox_users?username=eq.{safe_u}", {"notebooks": notebooks})
 
 def read_uploaded_photo(uploaded_file):
-    from openai import OpenAI
+    import pytesseract
 
     img = Image.open(uploaded_file).convert("RGB")
     w, h = img.size
-    if w < 1400:
-        scale = 1400 / w
+    if w < 1600:
+        scale = 1600 / w
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Contrast(img).enhance(1.4)
-    img = ImageEnhance.Sharpness(img).enhance(1.6)
+    img = img.convert("L")
+    img = ImageEnhance.Contrast(img).enhance(1.8)
+    img = ImageEnhance.Sharpness(img).enhance(2.0)
 
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=90)
-    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+    raw_text = pytesseract.image_to_string(img, lang="rus+ron+eng").strip()
+    if not raw_text:
+        raise Exception("На фото не удалось найти текст. Попробуй сфотографировать ближе и при хорошем свете.")
 
-    if not OR_KEY:
-        raise Exception("Добавь OPENROUTER_API_KEY в Secrets в настройках Streamlit!")
-
-    or_client = OpenAI(
-        base_url="https://openrouter.ai",
-        api_key=OR_KEY,
-        default_headers={
-            "HTTP-Referer": "https://streamlit.app",
-            "X-Title": "StudyBox"
-        }
+    # Твоя основная рабочая нейросеть Groq исправляет любые опечатки сканера и собирает красивый текст
+    clean_resp = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=(
+            {"role": "system", "content": "Ты корректор текста. Тебе дают текст, распознанный с фотографии страницы учебника (на русском, румынском или английском). Исправь случайные опечатки распознавания, аккуратно оформи формулы и собери текст в ровные абзацы, сохраняя весь смысл слово в слово. Не добавляй своих комментариев — верни ТОЛЬКО исправленный текст."},
+            {"role": "user", "content": raw_text}
+        )
     )
-
-    vision_models = (
-        "google/gemma-3-27b-it:free",
-        "qwen/qwen2.5-vl-72b-instruct:free",
-        "qwen/qwen2.5-vl-32b-instruct:free",
-        "mistralai/mistral-small-3.1-24b-instruct:free",
-        "meta-llama/llama-3.2-11b-vision-instruct:free"
-    )
-    last_err = ""
-    for model_name in vision_models:
-        try:
-            resp = or_client.chat.completions.create(
-                model=model_name,
-                messages=(
-                    {
-                        "role": "user",
-                        "content": (
-                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника или тетради слово в слово на языке оригинала (румынский, русский или английский). Если на странице есть рисунки, схемы, графики или геометрические фигуры с подписями, кратко опиши их смысл в скобках в нужном месте. Сохраняй абзацы. Не добавляй вступлений — верни ТОЛЬКО текст со страницы."},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                        )
-                    },
-                )
-            )
-            if resp and resp.choices:
-                content = resp.choices.pop(0).message.content
-                if content and content.strip():
-                    return content.strip()
-        except Exception as e:
-            last_err = str(e)
-            continue
-    raise Exception(f"Не удалось прочитать фото: {last_err}")
-
-defaults = (
-    ("current_user", None),
-    ("source_text", ""),
-    ("adapted_text", ""),
-    ("quiz_data", None),
-    ("show_quiz", False),
-    ("grade_result", None),
-    ("active_notebook", None),
-    ("show_new_nb_form", False)
-)
-for key, val in defaults:
-    if key not in st.session_state:
-        st.session_state[key] = val
-
-st.markdown("""
-    <style>
-    @import url('https://googleapis.com');
-    html, body, p, div, label, input, textarea, select, button { font-family: 'Nunito', sans-serif !important; }
-    .auth-header {
-        background: linear-gradient(135deg, #5B4BC4 0%, #8E7FF5 100%);
-        padding: 40px 32px; border-radius: 26px; color: white; text-align: center;
-        margin-bottom: 30px; box-shadow: 0 16px 40px rgba(91, 75, 196, 0.22);
-    }
-    .auth-header h1 { font-size: 38px !important; font-weight: 900 !important; margin: 0 !important; }
-    .auth-header p { font-size: 20px !important; margin-top: 12px !important; opacity: 0.95; }
-    </style>
-""", unsafe_allow_html=True)
-
-if not st.session_state.current_user:
-    st.markdown('<div class="auth-header" translate="no"><h1>StudyBox</h1><p>Личный кабинет ученика — твои тетради сохраняются навсегда</p></div>', unsafe_allow_html=True)
-    tab_login, tab_reg = st.tabs(("Вход в аккаунт", "Регистрация"))
-
-    with tab_login:
-        with st.form("login_form"):
-            nick = st.text_input("Никнейм:")
-            pwd = st.text_input("Пароль:", type="password")
-            if st.form_submit_button("Войти в кабинет"):
-                clean_nick = nick.strip()
-                try:
-                    rec = get_user_record(clean_nick)
-                    if rec and rec.get("password_hash") == hash_pass(pwd):
-                        st.session_state.current_user = clean_nick
-                        st.rerun()
-                    else:
-                        st.error("Неверный никнейм или пароль.")
-                except Exception as e:
-                    st.error(f"Ошибка подключения к базе: {e}")
+    return clean_resp.choices.pop(0).message.content.strip()
 
     with tab_reg:
         with st.form("reg_form"):
