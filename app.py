@@ -57,6 +57,8 @@ def save_user_notebooks(username, notebooks):
     sb_request("PATCH", f"studybox_users?username=eq.{safe_u}", {"notebooks": notebooks})
 
 def read_uploaded_photo(uploaded_file):
+    from openai import OpenAI
+
     img = Image.open(uploaded_file).convert("RGB")
     w, h = img.size
     if w < 1400:
@@ -72,53 +74,45 @@ def read_uploaded_photo(uploaded_file):
     if not OR_KEY:
         raise Exception("Добавь OPENROUTER_API_KEY в Secrets в настройках Streamlit!")
 
+    or_client = OpenAI(
+        base_url="https://openrouter.ai",
+        api_key=OR_KEY,
+        default_headers={
+            "HTTP-Referer": "https://streamlit.app",
+            "X-Title": "StudyBox"
+        }
+    )
+
     vision_models = (
-        "openrouter/free",
         "google/gemma-3-27b-it:free",
-        "google/gemma-3-12b-it:free",
+        "qwen/qwen2.5-vl-72b-instruct:free",
+        "qwen/qwen2.5-vl-32b-instruct:free",
         "mistralai/mistral-small-3.1-24b-instruct:free",
-        "qwen/qwen2.5-vl-32b-instruct:free"
+        "meta-llama/llama-3.2-11b-vision-instruct:free"
     )
     last_err = ""
     for model_name in vision_models:
         try:
-            payload = json.dumps({
-                "model": model_name,
-                "messages": (
+            resp = or_client.chat.completions.create(
+                model=model_name,
+                messages=(
                     {
                         "role": "user",
                         "content": (
-                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника слово в слово на языке оригинала (румынский, русский или английский). Если на странице есть рисунки, схемы, графики или геометрические фигуры с подписями, кратко опиши их смысл в скобках в нужном месте. Сохраняй абзацы. Не добавляй вступлений — верни ТОЛЬКО текст со страницы."},
+                            {"type": "text", "text": "Внимательно распознай и перепиши весь текст с этой фотографии страницы учебника или тетради слово в слово на языке оригинала (румынский, русский или английский). Если на странице есть рисунки, схемы, графики или геометрические фигуры с подписями, кратко опиши их смысл в скобках в нужном месте. Сохраняй абзацы. Не добавляй вступлений — верни ТОЛЬКО текст со страницы."},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
                         )
                     },
                 )
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                "https://openrouter.ai",
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {OR_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://streamlit.app",
-                    "X-Title": "StudyBox"
-                }
             )
-            with urllib.request.urlopen(req, timeout=40) as resp:
-                res = json.loads(resp.read().decode("utf-8"))
-                choices = res.get("choices")
-                if choices:
-                    text_res = choices.pop(0).get("message").get("content", "").strip()
-                    if text_res:
-                        return text_res
-        except urllib.error.HTTPError as he:
-            err_body = he.read().decode("utf-8", errors="ignore")
-            last_err = f"HTTP {he.code}: {err_body[:120]}"
-            continue
+            if resp and resp.choices:
+                content = resp.choices.pop(0).message.content
+                if content and content.strip():
+                    return content.strip()
         except Exception as e:
             last_err = str(e)
             continue
-    raise Exception(f"Ошибка OpenRouter: {last_err}")
+    raise Exception(f"Не удалось прочитать фото: {last_err}")
 
 defaults = (
     ("current_user", None),
