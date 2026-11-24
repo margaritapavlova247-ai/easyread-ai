@@ -1,5 +1,5 @@
 import streamlit as st
-import json, os, hashlib
+import json, os, hashlib, hmac
 import urllib.request, urllib.parse
 from datetime import datetime
 from PIL import Image, ImageEnhance
@@ -15,6 +15,9 @@ st.set_page_config(page_title="StudyBox", page_icon="📖", layout="centered")
 
 def hash_pass(p):
     return hashlib.sha256(p.encode()).hexdigest()
+
+def make_auth_token(username, password_hash):
+    return hmac.new(SB_KEY.encode(), f"{username}:{password_hash}".encode(), hashlib.sha256).hexdigest()[:24]
 
 def sb_request(method, endpoint, data=None):
     url = f"{SB_URL}/rest/v1/{endpoint}"
@@ -94,6 +97,18 @@ for key, val in defaults:
     if key not in st.session_state:
         st.session_state[key] = val
 
+# Безопасное восстановление сессии только на этом устройстве через подписанный токен в браузере
+if not st.session_state.current_user:
+    q_user = st.query_params.get("u", "")
+    q_tok = st.query_params.get("t", "")
+    if q_user and q_tok:
+        try:
+            rec = get_user_record(q_user)
+            if rec and make_auth_token(q_user, rec.get("password_hash", "")) == q_tok:
+                st.session_state.current_user = q_user
+        except Exception:
+            pass
+
 st.markdown("""
     <style>
     @import url('https://googleapis.com');
@@ -116,12 +131,16 @@ if not st.session_state.current_user:
         with st.form("login_form"):
             nick = st.text_input("Никнейм:")
             pwd = st.text_input("Пароль:", type="password")
+            rem = st.checkbox("Запомнить меня на этом устройстве", value=True)
             if st.form_submit_button("Войти в кабинет"):
                 clean_nick = nick.strip()
                 try:
                     rec = get_user_record(clean_nick)
                     if rec and rec.get("password_hash") == hash_pass(pwd):
                         st.session_state.current_user = clean_nick
+                        if rem:
+                            st.query_params["u"] = clean_nick
+                            st.query_params["t"] = make_auth_token(clean_nick, rec.get("password_hash"))
                         st.rerun()
                     else:
                         st.error("Неверный никнейм или пароль.")
@@ -133,6 +152,7 @@ if not st.session_state.current_user:
             r_nick = st.text_input("Придумай никнейм:")
             r_pwd = st.text_input("Придумай пароль (от 4 символов):", type="password")
             r_pwd2 = st.text_input("Повтори пароль:", type="password")
+            r_rem = st.checkbox("Запомнить меня на этом устройстве", value=True)
             if st.form_submit_button("Создать аккаунт"):
                 clean_r = r_nick.strip()
                 if not clean_r or len(r_pwd) < 4:
@@ -143,6 +163,9 @@ if not st.session_state.current_user:
                     try:
                         if register_user_db(clean_r, r_pwd):
                             st.session_state.current_user = clean_r
+                            if r_rem:
+                                st.query_params["u"] = clean_r
+                                st.query_params["t"] = make_auth_token(clean_r, hash_pass(r_pwd))
                             st.rerun()
                         else:
                             st.error("Этот никнейм уже занят.")
@@ -150,6 +173,7 @@ if not st.session_state.current_user:
                         st.error(f"Ошибка регистрации: {e}")
     st.stop()
 notebooks = get_user_notebooks(st.session_state.current_user)
+
 with st.sidebar:
     st.markdown(f"<div style='font-size:22px; font-weight:800; margin-bottom:8px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
     if st.button("Выйти из аккаунта", key="logout_btn"):
@@ -157,6 +181,7 @@ with st.sidebar:
         st.session_state.active_notebook = None
         st.session_state.source_text = ""
         st.session_state.adapted_text = ""
+        st.query_params.clear()
         st.rerun()
 
     st.markdown("<hr style='margin:16px 0;'>", unsafe_allow_html=True)
@@ -297,7 +322,17 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="section-title">1. Исходный текст из учебника</div>', unsafe_allow_html=True)
+col_sec1, col_clr = st.columns((3, 1))
+with col_sec1:
+    st.markdown('<div class="section-title">1. Исходный текст из учебника</div>', unsafe_allow_html=True)
+with col_clr:
+    st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
+    if st.button("Очистить поле", key="clear_text_btn"):
+        st.session_state.source_text = ""
+        st.session_state.adapted_text = ""
+        st.session_state.show_quiz = False
+        st.session_state.grade_result = None
+        st.rerun()
 
 tab_txt, tab_img = st.tabs(("Вставить текст", "Загрузить или сфоткать страницу"))
 
@@ -316,122 +351,3 @@ with tab_img:
 with tab_txt:
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
     st.session_state.source_text = text
-st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
-mode = st.radio(
-    "Формат:",
-    (
-        "Упрощённый текст — короткие абзацы и выделение главного",
-        "Главная суть — только даты, имена, термины и определения",
-        "Объяснение простыми словами — с примером из жизни"
-    ),
-    label_visibility="collapsed"
-)
-
-if st.button("Адаптировать текст", key="adapt_btn"):
-    current_text = st.session_state.source_text.strip()
-    if current_text:
-        with st.spinner("Перестраиваю текст..."):
-            if "Упрощённый" in mode:
-                task = "Перепиши текст на русском языке максимально просто и понятно: разбей на короткие абзацы по 2 предложения, разделяй абзацы пустой строкой, убери сложные слова и воду, выдели **жирным шрифтом** ключевые слова. Не используй смайлики и эмодзи."
-            elif "Главная суть" in mode:
-                task = """Выпиши из этого текста на русском языке ТОЛЬКО самую главную суть: все важные даты, имена, формулы, термины и определения.
-                Строгие правила оформления:
-                1. Никаких смайликов и эмодзи.
-                2. Каждый термин или дата ДОЛЖНЫ начинаться с нового абзаца (обязательно ставь пустую строку между пунктами).
-                3. Формат каждого абзаца: **Дата или термин** — чёткое объяснение в 1-2 предложения.
-                4. Никаких вступлений и заключений, только сам список."""
-            else:
-                task = "Объясни этот текст на русском языке максимально простыми и понятными словами, добавь 1 яркий пример из жизни. Разделяй абзацы пустой строкой. Не используй смайлики и эмодзи."
-
-            response = client.chat.completions.create(
-                model="openai/gpt-oss-120b",
-                messages=({"role": "system", "content": "Ты помощник в учёбе. Работай строго по тексту пользователя. Никогда не используй эмодзи и смайлики."}, {"role": "user", "content": f"{task}\n\nТекст:\n{current_text}"})
-            )
-            st.session_state.adapted_text = response.choices.pop(0).message.content
-            st.session_state.show_quiz = False
-            st.session_state.grade_result = None
-    else:
-        st.warning("Сначала вставь текст или распознай его с фотографии выше.")
-
-if st.session_state.adapted_text:
-    st.markdown('<div class="section-title">3. Готовый материал</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        st.markdown(st.session_state.adapted_text)
-
-    with st.expander("Сохранить этот конспект в тетрадь"):
-        with st.form("save_note_form"):
-            note_topic = st.text_input("Название темы:", placeholder="Например: Геометрия треугольника")
-            target_nb = st.selectbox("В какую тетрадь сохранить:", tuple(notebooks.keys()))
-            if st.form_submit_button("Сохранить конспект"):
-                clean_topic = note_topic.strip() if note_topic.strip() else "Конспект без названия"
-                nb_list = list(notebooks.get(target_nb, ()))
-                nb_list.append({
-                    "topic": clean_topic,
-                    "content": st.session_state.adapted_text,
-                    "date": datetime.now().strftime("%d.%m.%Y")
-                })
-                notebooks.update({target_nb: nb_list})
-                save_user_notebooks(st.session_state.current_user, notebooks)
-                st.success(f"Конспект «{clean_topic}» сохранён в тетрадь «{target_nb}»!")
-    if st.button("Создать контрольный тест (5 заданий)", key="make_quiz_btn"):
-        saved_topic_text = st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
-        with st.spinner("Составляю контрольную работу..."):
-            quiz_prompt = f"""Составь контрольную на русском языке из 5 заданий строго по этому тексту без смайликов. Верни СТРОГО валидный JSON без ```json:
-            {{"q1": {{"question": "Вопрос 1?", "options": ["А", "Б", "В"]}}, "q2": {{"question": "Вопрос 2?", "options": ["А", "Б", "В"]}}, "q3": {{"question": "Вопрос 3?", "options": ["А", "Б", "В"]}}, "q4": {{"title": "Задание 4: Соедини пару", "left_1": "Элемент 1", "left_2": "Элемент 2", "right_options": ["Пара 1", "Пара 2"]}}, "q5": "Задание 5 (Мини-эссе): Перескажи тему в 2-3 предложениях."}}
-            Текст: {saved_topic_text}"""
-            q_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": quiz_prompt},))
-            raw_json = q_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
-            try:
-                parsed_q = json.loads(raw_json)
-                parsed_q.update({"_topic_text": saved_topic_text})
-                st.session_state.quiz_data = parsed_q
-                st.session_state.show_quiz = True
-                st.session_state.grade_result = None
-            except Exception:
-                st.error("Нажми на кнопку «Создать контрольный тест» ещё раз.")
-
-if st.session_state.show_quiz and st.session_state.quiz_data:
-    qd = st.session_state.quiz_data
-    st.markdown('<div class="a4-paper"><h2 style="margin:0; font-weight:900;">КОНТРОЛЬНАЯ РАБОТА</h2><p style="margin-top:6px; color:#64748B;">Ответь на вопросы, соедини пары и напиши мини-эссе</p></div>', unsafe_allow_html=True)
-    with st.form("control_work_form"):
-        ans1 = st.radio(f"1. {qd.get('q1').get('question')}", qd.get('q1').get('options'), key="r1")
-        ans2 = st.radio(f"2. {qd.get('q2').get('question')}", qd.get('q2').get('options'), key="r2")
-        ans3 = st.radio(f"3. {qd.get('q3').get('question')}", qd.get('q3').get('options'), key="r3")
-        st.markdown(f"**{qd.get('q4').get('title')}**")
-        c1, c2 = st.columns(2)
-        with c1: match1 = st.selectbox(qd.get('q4').get('left_1'), qd.get('q4').get('right_options'), key="m1")
-        with c2: match2 = st.selectbox(qd.get('q4').get('left_2'), qd.get('q4').get('right_options'), key="m2")
-        essay = st.text_area(f"5. {qd.get('q5')}", height=110)
-        if st.form_submit_button("Отправить на проверку"):
-            topic_for_check = qd.get("_topic_text") or st.session_state.source_text.strip() or st.session_state.adapted_text.strip()
-            with st.spinner("Внимательно проверяю каждый твой ответ по теме..."):
-                check_prompt = f"""Ты строгий, но справедливый школьный учитель. Проверь контрольную работу ученика СТРОГО по данному ниже исходному тексту и заданным вопросам. Не придумывай факты не из текста. Без смайликов.
-
-ИСХОДНЫЙ ТЕКСТ ТЕМЫ:
-{topic_for_check}
-
-ВОПРОСЫ И ОТВЕТЫ УЧЕНИКА:
-1. Вопрос: {qd.get('q1').get('question')} | Ответ ученика: {ans1}
-2. Вопрос: {qd.get('q2').get('question')} | Ответ ученика: {ans2}
-3. Вопрос: {qd.get('q3').get('question')} | Ответ ученика: {ans3}
-4. Соединить пары: {qd.get('q4').get('left_1')} -> ученик выбрал «{match1}»; {qd.get('q4').get('left_2')} -> ученик выбрал «{match2}»
-5. {qd.get('q5')} | Мини-эссе ученика: «{essay}»
-
-Оцени работу по 10-балльной шкале (от 1 до 10) и разбери каждый из 5 пунктов отдельно (верно или нет, и почему).
-Верни СТРОГО валидный JSON без ```json: {{"grade": 9, "feedback": "Подробный разбор каждого из 5 заданий на русском языке с пустыми строками между пунктами"}}"""
-                c_resp = client.chat.completions.create(model="openai/gpt-oss-120b", messages=({"role": "user", "content": check_prompt},))
-                raw_check = c_resp.choices.pop(0).message.content.strip().strip("`").replace("json", "", 1).strip()
-                try:
-                    st.session_state.grade_result = json.loads(raw_check)
-                except Exception:
-                    st.error("Ошибка проверки, нажми на кнопку «Отправить на проверку» ещё раз.")
-
-if st.session_state.grade_result:
-    gr = st.session_state.grade_result
-    st.markdown(f'<div class="grade-box"><div style="color:#C53030; font-weight:800; font-size:20px;">ТВОЯ ОЦЕНКА ЗА РАБОТУ</div><div class="grade-number">{gr.get("grade")} / 10</div></div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        st.markdown(gr.get("feedback"))
-    if st.button("Окей, закрыть разбор", key="close_grade_btn"):
-        st.session_state.show_quiz = False
-        st.session_state.grade_result = None
-        st.rerun()
