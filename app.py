@@ -62,22 +62,22 @@ def read_uploaded_photo(uploaded_file):
     if w < 1400:
         scale = 1400 / w
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Contrast(img).enhance(1.45)
-    img = ImageEnhance.Sharpness(img).enhance(1.8)
-    img = img.filter(ImageFilter.DETAIL)
+    img = ImageEnhance.Contrast(img).enhance(1.4)
+    img = ImageEnhance.Sharpness(img).enhance(1.6)
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=92)
+    img.save(buf, format="JPEG", quality=90)
     b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
 
     if not OR_KEY:
         raise Exception("Добавь OPENROUTER_API_KEY в Secrets в настройках Streamlit!")
 
     vision_models = (
-        "google/gemini-2.0-flash-exp:free",
-        "qwen/qwen2.5-vl-72b-instruct:free",
-        "meta-llama/llama-3.2-11b-vision-instruct:free",
-        "google/gemma-3-27b-it:free"
+        "openrouter/free",
+        "google/gemma-3-27b-it:free",
+        "google/gemma-3-12b-it:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "qwen/qwen2.5-vl-32b-instruct:free"
     )
     last_err = ""
     for model_name in vision_models:
@@ -104,15 +104,21 @@ def read_uploaded_photo(uploaded_file):
                     "X-Title": "StudyBox"
                 }
             )
-            with urllib.request.urlopen(req, timeout=35) as resp:
+            with urllib.request.urlopen(req, timeout=40) as resp:
                 res = json.loads(resp.read().decode("utf-8"))
                 choices = res.get("choices")
                 if choices:
-                    return choices.pop(0).get("message").get("content", "").strip()
+                    text_res = choices.pop(0).get("message").get("content", "").strip()
+                    if text_res:
+                        return text_res
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            last_err = f"HTTP {he.code}: {err_body[:120]}"
+            continue
         except Exception as e:
             last_err = str(e)
             continue
-    raise Exception(f"Не удалось прочитать фото ({last_err}). Попробуй сделать снимок ближе и светлее.")
+    raise Exception(f"Ошибка OpenRouter: {last_err}")
 
 defaults = (
     ("current_user", None),
