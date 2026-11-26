@@ -1,8 +1,8 @@
 import streamlit as st
-import json, os, hashlib, hmac
+import json, os, hashlib, hmac, base64, io
 import urllib.request, urllib.parse
 from datetime import datetime
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 from groq import Groq
 
 GROQ_KEY = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
@@ -59,29 +59,48 @@ def save_user_notebooks(username, notebooks):
     sb_request("PATCH", f"studybox_users?username=eq.{safe_u}", {"notebooks": notebooks})
 
 def read_uploaded_photo(uploaded_file):
-    import pytesseract
-
-    img = Image.open(uploaded_file).convert("RGB")
+    uploaded_file.seek(0)
+    img = Image.open(uploaded_file)
+    img = ImageOps.exif_transpose(img).convert("RGB")
     w, h = img.size
-    if w < 1600:
-        scale = 1600 / w
+    max_side = max(w, h)
+    if max_side > 1280:
+        scale = 1280 / max_side
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = img.convert("L")
-    img = ImageEnhance.Contrast(img).enhance(1.8)
-    img = ImageEnhance.Sharpness(img).enhance(2.0)
+    img = ImageEnhance.Sharpness(img).enhance(1.25)
 
-    raw_text = pytesseract.image_to_string(img, lang="rus+ron+eng").strip()
-    if not raw_text:
-        raise Exception("На фото не удалось найти печатный текст. Попробуй сфотографировать страницу учебника ближе и при хорошем свете.")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=82, optimize=True)
+    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    clean_resp = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=(
-            {"role": "system", "content": "Ты корректор текста. Тебе дают текст, распознанный с фотографии страницы учебника (на русском, румынском или английском). Исправь случайные опечатки распознавания, аккуратно оформи формулы и собери текст в ровные абзацы, сохраняя весь смысл слово в слово. Не добавляй своих комментариев — верни ТОЛЬКО исправленный текст."},
-            {"role": "user", "content": raw_text}
-        )
-    )
-    return clean_resp.choices.pop(0).message.content.strip()
+    all_models = list(map(lambda m: m.id, client.models.list().data))
+    vision_models = list(filter(lambda x: any(k in x.lower() for k in ("llama-4", "scout", "maverick", "vision")), all_models))
+    if not vision_models:
+        vision_models = ("meta-llama/llama-4-scout-17b-16e-instruct",)
+
+    last_err = ""
+    for model_name in vision_models:
+        try:
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=(
+                    {
+                        "role": "user",
+                        "content": (
+                            {"type": "text", "text": "Ты внимательный учитель. Перепиши весь текст и все математические формулы с этой фотографии страницы учебника слово в слово на языке оригинала (русский, румынский или английский). Формулы, степени и дроби пиши понятно обычными символами (например, x^2, a/b, √x). Если есть рисунки или чертежи, кратко поясни их в скобках. Верни ТОЛЬКО текст со страницы без своих комментариев."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                        )
+                    },
+                )
+            )
+            text_res = resp.choices.pop(0).message.content.strip()
+            if text_res:
+                return text_res
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    raise Exception(f"Зрительная модель Groq не ответила ({last_err}). Попробуй сделать фото более чётким.")
 
 defaults = (
     ("current_user", None),
