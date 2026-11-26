@@ -59,48 +59,36 @@ def save_user_notebooks(username, notebooks):
     sb_request("PATCH", f"studybox_users?username=eq.{safe_u}", {"notebooks": notebooks})
 
 def read_uploaded_photo(uploaded_file):
+    import pytesseract
+
     uploaded_file.seek(0)
     img = Image.open(uploaded_file)
     img = ImageOps.exif_transpose(img).convert("RGB")
     w, h = img.size
     max_side = max(w, h)
-    if max_side > 1280:
-        scale = 1280 / max_side
+    if max_side < 1800:
+        scale = 1800 / max_side
         img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    img = ImageEnhance.Sharpness(img).enhance(1.25)
+    elif max_side > 2400:
+        scale = 2400 / max_side
+        img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
 
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=82, optimize=True)
-    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+    img = img.convert("L")
+    img = ImageEnhance.Contrast(img).enhance(1.5)
+    img = ImageEnhance.Sharpness(img).enhance(1.6)
 
-    all_models = list(map(lambda m: m.id, client.models.list().data))
-    vision_models = list(filter(lambda x: any(k in x.lower() for k in ("llama-4", "scout", "maverick", "vision")), all_models))
-    if not vision_models:
-        vision_models = ("meta-llama/llama-4-scout-17b-16e-instruct",)
+    raw_text = pytesseract.image_to_string(img, lang="rus+ron+eng", config="--psm 6").strip()
+    if not raw_text:
+        raise Exception("На фото не удалось найти текст. Попробуй сфотографировать страницу ближе и ровнее.")
 
-    last_err = ""
-    for model_name in vision_models:
-        try:
-            resp = client.chat.completions.create(
-                model=model_name,
-                messages=(
-                    {
-                        "role": "user",
-                        "content": (
-                            {"type": "text", "text": "Ты внимательный учитель. Перепиши весь текст и все математические формулы с этой фотографии страницы учебника слово в слово на языке оригинала (русский, румынский или английский). Формулы, степени и дроби пиши понятно обычными символами (например, x^2, a/b, √x). Если есть рисунки или чертежи, кратко поясни их в скобках. Верни ТОЛЬКО текст со страницы без своих комментариев."},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                        )
-                    },
-                )
-            )
-            text_res = resp.choices.pop(0).message.content.strip()
-            if text_res:
-                return text_res
-        except Exception as e:
-            last_err = str(e)
-            continue
-
-    raise Exception(f"Зрительная модель Groq не ответила ({last_err}). Попробуй сделать фото более чётким.")
+    clean_resp = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=(
+            {"role": "system", "content": "Ты опытный школьный учитель математики и корректор. Тебе дают текст, отсканированный со страницы школьного учебника (на русском или румынском языке). В тексте могут быть опечатки сканера в словах и математических формулах (дроби, степени, корни, уравнения). Восстанови по смыслу все слова и математические выражения, запиши формулы аккуратно (например, a/b, x^2, √x), убери случайный мусор из букв, сохраняя весь исходный текст параграфа слово в слово. Не добавляй своих комментариев — верни ТОЛЬКО восстановленный чистый текст страницы."},
+            {"role": "user", "content": raw_text}
+        )
+    )
+    return clean_resp.choices.pop(0).message.content.strip()
 
 defaults = (
     ("current_user", None),
