@@ -98,7 +98,8 @@ defaults = (
     ("show_quiz", False),
     ("grade_result", None),
     ("active_notebook", None),
-    ("show_new_nb_form", False)
+        ("show_new_nb_form", False),
+    ("input_tab", "Вставить текст")
 )
 for key, val in defaults:
     if key not in st.session_state:
@@ -341,9 +342,15 @@ with col_clr:
         st.session_state.grade_result = None
         st.rerun()
 
-tab_txt, tab_img = st.tabs(("Вставить текст", "Загрузить или сфоткать страницу"))
+input_mode = st.radio(
+    "Способ ввода:",
+    ("Вставить текст", "Загрузить или сфоткать страницу"),
+    horizontal=True,
+    key="input_tab",
+    label_visibility="collapsed"
+)
 
-with tab_img:
+if input_mode == "Загрузить или сфоткать страницу":
     photo_file = st.file_uploader("Выбери фото страницы учебника или сделай снимок на телефоне:", type=("jpg", "jpeg", "png"))
     if photo_file is not None:
         st.image(photo_file, caption="Загруженная страница", use_container_width=True)
@@ -351,11 +358,12 @@ with tab_img:
             with st.spinner("Улучшаю чёткость фото и читаю страницу..."):
                 try:
                     st.session_state.source_text = read_uploaded_photo(photo_file)
-                    st.success("Страница успешно прочитана! Перейди на вкладку «Вставить текст» — текст уже там.")
+                    st.session_state.input_tab = "Вставить текст"
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Не удалось прочитать фото: {e}")
 
-with tab_txt:
+if input_mode == "Вставить текст":
     text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
     st.session_state.source_text = text
 st.markdown('<div class="section-title">2. Выбери формат обработки</div>', unsafe_allow_html=True)
