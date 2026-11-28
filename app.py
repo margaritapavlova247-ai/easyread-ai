@@ -98,14 +98,13 @@ defaults = (
     ("show_quiz", False),
     ("grade_result", None),
     ("active_notebook", None),
-        ("show_new_nb_form", False),
+    ("show_new_nb_form", False),
     ("input_tab", "Вставить текст")
 )
 for key, val in defaults:
     if key not in st.session_state:
         st.session_state[key] = val
 
-# Безопасное восстановление сессии только на этом устройстве через подписанный токен в браузере
 if not st.session_state.current_user:
     q_user = st.query_params.get("u", "")
     q_tok = st.query_params.get("t", "")
@@ -342,13 +341,15 @@ with col_clr:
         st.session_state.grade_result = None
         st.rerun()
 
+tab_idx = 0 if st.session_state.input_tab == "Вставить текст" else 1
 input_mode = st.radio(
     "Способ ввода:",
     ("Вставить текст", "Загрузить или сфоткать страницу"),
+    index=tab_idx,
     horizontal=True,
-    key="input_tab",
     label_visibility="collapsed"
 )
+st.session_state.input_tab = input_mode
 
 if input_mode == "Загрузить или сфоткать страницу":
     photo_file = st.file_uploader("Выбери фото страницы учебника или сделай снимок на телефоне:", type=("jpg", "jpeg", "png"))
