@@ -120,13 +120,20 @@ st.markdown("""
     <style>
     @import url('https://googleapis.com');
     html, body, p, div, label, input, textarea, select, button { font-family: 'Nunito', sans-serif !important; }
+    .stApp { background-color: #F4F5E6; color: #262B18; }
     .auth-header {
-        background: linear-gradient(135deg, #5B4BC4 0%, #8E7FF5 100%);
-        padding: 40px 32px; border-radius: 26px; color: white; text-align: center;
-        margin-bottom: 30px; box-shadow: 0 16px 40px rgba(91, 75, 196, 0.22);
+        background: linear-gradient(135deg, #6E7E3E 0%, #AEBA65 100%);
+        padding: 38px 30px; border-radius: 26px; color: #FFFFFF; text-align: center;
+        margin-bottom: 28px; box-shadow: 0 14px 34px rgba(110, 126, 62, 0.22);
+        border: 1px solid rgba(255,255,255,0.25);
     }
-    .auth-header h1 { font-size: 38px !important; font-weight: 900 !important; margin: 0 !important; }
-    .auth-header p { font-size: 20px !important; margin-top: 12px !important; opacity: 0.95; }
+    .auth-header h1 { font-size: 38px !important; font-weight: 900 !important; margin: 0 !important; letter-spacing: -0.5px; }
+    .auth-header p { font-size: 19px !important; margin-top: 10px !important; opacity: 0.96; }
+    div.stFormSubmitButton > button {
+        background: linear-gradient(135deg, #6E7E3E 0%, #8E9E52 100%) !important;
+        color: white !important; font-weight: 800 !important; border-radius: 14px !important;
+        border: none !important; padding: 10px 22px !important; font-size: 18px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -182,7 +189,7 @@ if not st.session_state.current_user:
 notebooks = get_user_notebooks(st.session_state.current_user)
 
 with st.sidebar:
-    st.markdown(f"<div style='font-size:22px; font-weight:800; margin-bottom:8px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:21px; font-weight:800; color:#262B18; margin-bottom:8px;'>Профиль: {st.session_state.current_user}</div>", unsafe_allow_html=True)
     if st.button("Выйти из аккаунта", key="logout_btn"):
         st.session_state.current_user = None
         st.session_state.active_notebook = None
@@ -191,7 +198,7 @@ with st.sidebar:
         st.query_params.clear()
         st.rerun()
 
-    st.markdown("<hr style='margin:16px 0;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:16px 0; border-color: rgba(110, 126, 62, 0.25);'>", unsafe_allow_html=True)
 
     if st.button("Новый конспект", key="home_btn"):
         st.session_state.active_notebook = None
@@ -201,7 +208,7 @@ with st.sidebar:
 
     col_title, col_plus = st.columns((4, 1))
     with col_title:
-        st.markdown("<div style='font-size:20px; font-weight:800; padding-top:4px;'>Мои тетради</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:19px; font-weight:800; color:#262B18; padding-top:4px;'>Мои тетради</div>", unsafe_allow_html=True)
     with col_plus:
         if st.button("+", key="add_nb_btn", help="Создать новую тетрадь"):
             st.session_state.show_new_nb_form = not st.session_state.show_new_nb_form
@@ -227,73 +234,74 @@ with st.sidebar:
             st.session_state.active_notebook = nb_name
             st.rerun()
 
-    st.markdown("<hr style='margin:20px 0;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:20px; font-weight:800; margin-bottom:8px;'>Оформление страницы</div>", unsafe_allow_html=True)
-    theme = st.selectbox("Оттенок фона:", ("Мягкий кремовый", "Нежно-мятный", "Спокойный голубой"))
-    font_size = st.slider("Размер текста:", min_value=18, max_value=28, value=22)
-
-bg_color = "#F8F4EC" if "кремовый" in theme else ("#EDF6F1" if "мятный" in theme else "#ECF3FA")
-accent_color = "#5B4BC4" if "кремовый" in theme else ("#0D8A72" if "мятный" in theme else "#2563EB")
-accent_light = "#8E7FF5" if "кремовый" in theme else ("#34D399" if "мятный" in theme else "#60A5FA")
-
-st.markdown(f"""
+st.markdown("""
     <style>
-    .stApp {{ background-color: {bg_color}; color: #1A1D26; }}
-    .block-container {{ max-width: 840px !important; padding-top: 2.5rem !important; padding-bottom: 4rem !important; }}
-    p, label, .stMarkdown p, .stRadio label p, .stSelectbox label p, .stSlider label p, .stTextArea label p, .stTextInput label p {{
-        font-size: 20px !important; line-height: 1.65 !important;
-    }}
-    div[role="radiogroup"] label {{
-        background-color: #FFFFFF; padding: 14px 18px !important; border-radius: 14px !important;
-        border: 1px solid rgba(0,0,0,0.06) !important; margin-bottom: 10px !important;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.02); transition: 0.2s;
-    }}
-    div[role="radiogroup"] label:hover {{ border-color: {accent_color} !important; transform: translateX(4px); }}
-    textarea, input[type="text"] {{ font-size: 19px !important; border-radius: 14px !important; padding: 14px !important; }}
-    .hero-box {{
-        background: linear-gradient(135deg, {accent_color} 0%, {accent_light} 100%);
-        padding: 38px 34px; border-radius: 26px; color: white; margin-bottom: 32px;
-        box-shadow: 0 18px 40px rgba(0,0,0,0.1);
-    }}
-    .hero-badge {{
-        display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 14px;
-        border-radius: 20px; font-size: 14px !important; font-weight: 800;
-        letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 12px;
-    }}
-    .hero-title {{ font-size: 40px !important; font-weight: 900 !important; margin: 0 !important; }}
-    .hero-sub {{ font-size: 20px !important; opacity: 0.95; margin-top: 12px !important; }}
-    .section-title {{ font-size: 25px !important; font-weight: 800 !important; color: #1A1D26; margin-top: 24px !important; margin-bottom: 12px !important; }}
-    div.stVerticalBlockBorderWrapper {{
-        background-color: #FFFFFF !important; border-radius: 22px !important; border: none !important;
-        border-left: 7px solid {accent_color} !important; padding: 22px 26px !important;
-        box-shadow: 0 12px 32px rgba(0,0,0,0.06) !important; margin: 18px 0 !important;
-    }}
-    div.stVerticalBlockBorderWrapper p {{ font-size: {font_size}px !important; line-height: 1.75 !important; margin-bottom: 14px !important; }}
-    .a4-paper {{
-        background-color: #FFFFFF; padding: 32px; border-radius: 12px; border: 1px solid #E2E8F0;
-        box-shadow: 0 14px 36px rgba(0,0,0,0.08); margin: 28px 0 18px 0;
-        border-top: 9px solid {accent_color}; text-align: center;
-    }}
-    .grade-box {{
-        background-color: #FFF5F5; border: 3px solid #E02424; border-radius: 24px;
-        padding: 30px; text-align: center; margin-top: 24px; box-shadow: 0 12px 30px rgba(224, 36, 36, 0.12);
-    }}
-    .grade-number {{ font-size: 80px !important; font-weight: 900 !important; color: #E02424; line-height: 1.1 !important; }}
-    @keyframes shimmer {{ 0% {{ background-position: 0% 50%; }} 50% {{ background-position: 100% 50%; }} 100% {{ background-position: 0% 50%; }} }}
-    section.main div.stButton > button {{
-        background: linear-gradient(270deg, {accent_color}, {accent_light}, {accent_color});
-        background-size: 200% 200%; animation: shimmer 5s ease infinite; color: white !important;
-        font-size: 20px !important; font-weight: 800 !important; padding: 14px 24px !important;
-        border-radius: 16px !important; border: none !important; width: 100%; margin-top: 8px !important;
-    }}
-    section[data-testid="stSidebar"] div.stButton > button {{
-        background: transparent !important; animation: none !important; color: #1A1D26 !important;
-        font-size: 18px !important; font-weight: 600 !important; padding: 8px 12px !important;
+    .stApp { background-color: #F4F5E6; color: #262B18; }
+    section[data-testid="stSidebar"] { background-color: #EAECD2 !important; border-right: 1px solid rgba(110, 126, 62, 0.2); }
+    .block-container { max-width: 820px !important; padding-top: 2.2rem !important; padding-bottom: 4rem !important; }
+    p, label, .stMarkdown p, .stRadio label p, .stSelectbox label p, .stTextArea label p, .stTextInput label p {
+        font-size: 19px !important; line-height: 1.65 !important; color: #262B18;
+    }
+    div[role="radiogroup"] label {
+        background-color: #FCFDF7; padding: 14px 18px !important; border-radius: 14px !important;
+        border: 1.5px solid #D6D794 !important; margin-bottom: 10px !important;
+        box-shadow: 0 3px 10px rgba(110, 126, 62, 0.05); transition: 0.2s;
+    }
+    div[role="radiogroup"] label:hover { border-color: #6E7E3E !important; background-color: #F7F8E8 !important; transform: translateX(3px); }
+    textarea, input[type="text"] {
+        font-size: 18px !important; border-radius: 14px !important; padding: 14px !important;
+        background-color: #FCFDF7 !important; border: 1.5px solid #D6D794 !important; color: #262B18 !important;
+    }
+    textarea:focus, input[type="text"]:focus { border-color: #6E7E3E !important; box-shadow: 0 0 0 2px rgba(110, 126, 62, 0.18) !important; }
+    .hero-box {
+        background: linear-gradient(135deg, #6E7E3E 0%, #AEBA65 100%);
+        padding: 36px 32px; border-radius: 26px; color: #FFFFFF; margin-bottom: 30px;
+        box-shadow: 0 16px 36px rgba(110, 126, 62, 0.22);
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+    .hero-box p, .hero-box div { color: #FFFFFF !important; }
+    .hero-badge {
+        display: inline-block; background: rgba(255,255,255,0.22); padding: 6px 14px;
+        border-radius: 20px; font-size: 13px !important; font-weight: 800;
+        letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .hero-title { font-size: 38px !important; font-weight: 900 !important; margin: 0 !important; }
+    .hero-sub { font-size: 19px !important; opacity: 0.96; margin-top: 10px !important; }
+    .section-title { font-size: 24px !important; font-weight: 800 !important; color: #3D4720; margin-top: 22px !important; margin-bottom: 12px !important; }
+    div.stVerticalBlockBorderWrapper {
+        background-color: #FCFDF7 !important; border-radius: 20px !important; border: 1.5px solid #D6D794 !important;
+        border-left: 7px solid #6E7E3E !important; padding: 22px 26px !important;
+        box-shadow: 0 10px 28px rgba(110, 126, 62, 0.08) !important; margin: 18px 0 !important;
+    }
+    div.stVerticalBlockBorderWrapper p { font-size: 20px !important; line-height: 1.75 !important; margin-bottom: 14px !important; color: #262B18 !important; }
+    .a4-paper {
+        background-color: #FCFDF7; padding: 30px; border-radius: 16px; border: 1.5px solid #D6D794;
+        box-shadow: 0 12px 30px rgba(110, 126, 62, 0.09); margin: 26px 0 18px 0;
+        border-top: 9px solid #6E7E3E; text-align: center;
+    }
+    .grade-box {
+        background-color: #F4F5E6; border: 3px solid #6E7E3E; border-radius: 24px;
+        padding: 28px; text-align: center; margin-top: 24px; box-shadow: 0 12px 28px rgba(110, 126, 62, 0.14);
+    }
+    .grade-number { font-size: 76px !important; font-weight: 900 !important; color: #55632D; line-height: 1.1 !important; }
+    @keyframes shimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    section.main div.stButton > button, div.stFormSubmitButton > button {
+        background: linear-gradient(270deg, #6E7E3E, #99A754, #6E7E3E) !important;
+        background-size: 200% 200%; animation: shimmer 6s ease infinite; color: #FFFFFF !important;
+        font-size: 19px !important; font-weight: 800 !important; padding: 13px 22px !important;
+        border-radius: 15px !important; border: none !important; width: 100%; margin-top: 6px !important;
+        box-shadow: 0 6px 18px rgba(110, 126, 62, 0.22);
+    }
+    section.main div.stButton > button p, div.stFormSubmitButton > button p { color: #FFFFFF !important; font-weight: 800 !important; }
+    section[data-testid="stSidebar"] div.stButton > button {
+        background: transparent !important; animation: none !important; color: #262B18 !important;
+        font-size: 18px !important; font-weight: 700 !important; padding: 8px 12px !important;
         border-radius: 10px !important; border: none !important; box-shadow: none !important;
         text-align: left !important; justify-content: flex-start !important;
         margin-top: 2px !important; margin-bottom: 2px !important; width: 100%;
-    }}
-    section[data-testid="stSidebar"] div.stButton > button:hover {{ background-color: rgba(0, 0, 0, 0.06) !important; }}
+    }
+    section[data-testid="stSidebar"] div.stButton > button p { color: #262B18 !important; }
+    section[data-testid="stSidebar"] div.stButton > button:hover { background-color: rgba(110, 126, 62, 0.14) !important; }
     </style>
 """, unsafe_allow_html=True)
 if st.session_state.active_notebook:
@@ -480,7 +488,7 @@ if st.session_state.show_quiz and st.session_state.quiz_data:
 
 if st.session_state.grade_result:
     gr = st.session_state.grade_result
-    st.markdown(f'<div class="grade-box"><div style="color:#C53030; font-weight:800; font-size:20px;">ТВОЯ ОЦЕНКА ЗА РАБОТУ</div><div class="grade-number">{gr.get("grade")} / 10</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="grade-box"><div style="color:#55632D; font-weight:800; font-size:20px;">ТВОЯ ОЦЕНКА ЗА РАБОТУ</div><div class="grade-number">{gr.get("grade")} / 10</div></div>', unsafe_allow_html=True)
     with st.container(border=True):
         st.markdown(gr.get("feedback"))
     if st.button("Окей, закрыть разбор", key="close_grade_btn"):
