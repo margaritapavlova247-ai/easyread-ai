@@ -121,40 +121,51 @@ st.markdown("""
     @import url('https://googleapis.com');
     html, body, p, div, label, input, textarea, select, button { font-family: 'Plus Jakarta Sans', sans-serif !important; }
     .stApp {
-        background-color: #F7F8EE;
-        background-image: radial-gradient(#CDD1A8 1.1px, transparent 1.1px);
+        background-color: #F2F3E4;
+        background-image: radial-gradient(#D5D9B4 1.1px, transparent 1.1px);
         background-size: 24px 24px;
-        color: #252B16;
+        color: #2C331A;
     }
     .bento-auth {
-        background-color: #6E7E3E;
-        border: 1.5px solid #56642E;
-        box-shadow: 0 14px 32px rgba(72, 84, 38, 0.16);
-        border-radius: 24px;
+        background-color: #BCC484;
+        border: 1.5px solid #9BA45E;
+        box-shadow: 0 12px 28px rgba(127, 142, 71, 0.12);
+        border-radius: 22px;
         padding: 36px 32px;
-        margin-bottom: 28px;
-        color: #FFFFFF;
+        margin-bottom: 26px;
+        position: relative;
     }
     .bento-auth h1 {
         font-family: 'Lora', serif !important; font-size: 42px !important; font-weight: 700 !important;
-        color: #FFFFFF !important; margin: 10px 0 0 0 !important;
+        color: #242B14 !important; margin: 10px 0 0 0 !important;
     }
-    .bento-auth p { font-size: 18px !important; color: #F2F4E4 !important; font-weight: 500; margin-top: 8px !important; }
+    .bento-auth p { font-size: 17px !important; color: #343D1F !important; font-weight: 500; margin-top: 8px !important; }
     .sticker-tag {
-        display: inline-block; background-color: #D6D794; color: #252B16 !important;
-        border-radius: 8px; padding: 5px 12px;
-        font-size: 12px !important; font-weight: 800; letter-spacing: 0.9px; text-transform: uppercase;
+        display: inline-block; background-color: #E7E9C8; color: #36401E !important;
+        border: 1px solid #A8B16D; border-radius: 8px; padding: 4px 12px;
+        font-size: 11px !important; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
     }
+    .ornament-line {
+        display: flex; align-items: center; gap: 10px; margin-top: 16px; color: #5C6834; font-size: 13px; letter-spacing: 3px;
+    }
+    .ornament-line span.bar { flex: 1; height: 1px; background-color: rgba(74, 86, 39, 0.28); }
     div.stFormSubmitButton > button {
-        background-color: #6E7E3E !important; color: #FFFFFF !important; font-weight: 700 !important;
-        border-radius: 12px !important; border: 1px solid #586630 !important;
-        box-shadow: 0 4px 12px rgba(110, 126, 62, 0.2) !important; padding: 11px 22px !important; font-size: 17px !important;
+        background-color: #7F8E47 !important; color: #FAFBF2 !important; font-weight: 700 !important;
+        border-radius: 12px !important; border: 1px solid #6B7939 !important;
+        box-shadow: 0 4px 12px rgba(127, 142, 71, 0.16) !important; padding: 11px 22px !important; font-size: 17px !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 if not st.session_state.current_user:
-    st.markdown('<div class="bento-auth" translate="no"><span class="sticker-tag">Digital Study Platform</span><h1>StudyBox</h1><p>Персональное пространство для конспектов, облачных тетрадей и проверки знаний</p></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div class="bento-auth" translate="no">
+            <span class="sticker-tag">❖ Digital Study Workspace</span>
+            <h1>StudyBox</h1>
+            <p>Эстетичное пространство для конспектов, облачных тетрадей и проверки знаний</p>
+            <div class="ornament-line"><span class="bar"></span><span>✧ ❖ ✧</span><span class="bar"></span></div>
+        </div>
+    """, unsafe_allow_html=True)
     tab_login, tab_reg = st.tabs(("Вход в кабинет", "Создать аккаунт"))
 
     with tab_login:
@@ -206,8 +217,8 @@ notebooks = get_user_notebooks(st.session_state.current_user)
 
 with st.sidebar:
     st.markdown(f"""
-        <div style="background-color: #6E7E3E; padding: 18px 20px; border-radius: 16px; color: #FFFFFF; margin-bottom: 14px; box-shadow: 0 6px 18px rgba(110,126,62,0.18);">
-            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; opacity: 0.85; font-weight: 700;">Личный профиль</div>
+        <div style="background-color: #BCC484; border: 1.5px solid #9BA45E; padding: 18px 20px; border-radius: 16px; color: #242B14; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(127,142,71,0.1);">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: #3D4722; font-weight: 800;">❖ Личный профиль</div>
             <div style="font-size: 20px; font-weight: 800; margin-top: 2px;">{st.session_state.current_user}</div>
         </div>
     """, unsafe_allow_html=True)
@@ -220,9 +231,9 @@ with st.sidebar:
         st.query_params.clear()
         st.rerun()
 
-    st.markdown("<hr style='margin:16px 0; border-color: rgba(110, 126, 62, 0.25);'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:16px 0; border-color: rgba(127, 142, 71, 0.25);'>", unsafe_allow_html=True)
 
-    if st.button("Новый конспект", key="home_btn"):
+    if st.button("✧ Новый конспект", key="home_btn"):
         st.session_state.active_notebook = None
         st.rerun()
 
@@ -230,7 +241,7 @@ with st.sidebar:
 
     col_title, col_plus = st.columns((4, 1))
     with col_title:
-        st.markdown("<div style='font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#4D5929; padding-top:9px;'>Мои тетради</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#4D5929; padding-top:9px;'>❖ Мои тетради</div>", unsafe_allow_html=True)
     with col_plus:
         if st.button("+", key="add_nb_btn", help="Создать новую тетрадь"):
             st.session_state.show_new_nb_form = not st.session_state.show_new_nb_form
@@ -251,7 +262,7 @@ with st.sidebar:
 
     for nb_name in tuple(notebooks.keys()):
         notes_count = len(notebooks.get(nb_name, ()))
-        label_text = f"{nb_name}  ({notes_count})" if notes_count > 0 else nb_name
+        label_text = f"◦  {nb_name}  ({notes_count})" if notes_count > 0 else f"◦  {nb_name}"
         if st.button(label_text, key=f"nb_btn_{nb_name}"):
             st.session_state.active_notebook = nb_name
             st.rerun()
@@ -259,95 +270,97 @@ with st.sidebar:
 st.markdown("""
     <style>
     section[data-testid="stSidebar"] {
-        background-color: #ECEED6 !important;
-        border-right: 1px solid #C9CE94;
+        background-color: #E8EAD0 !important;
+        border-right: 1px solid #C5CA92;
     }
     .block-container { max-width: 800px !important; padding-top: 2rem !important; padding-bottom: 4.5rem !important; }
     p, label, .stMarkdown p, .stRadio label p, .stSelectbox label p, .stTextArea label p, .stTextInput label p {
-        font-size: 18px !important; line-height: 1.65 !important; color: #252B16;
+        font-size: 18px !important; line-height: 1.65 !important; color: #2C331A;
     }
     .hero-banner {
-        background-color: #6E7E3E;
-        border: 1px solid #56642E;
-        box-shadow: 0 14px 32px rgba(72, 84, 38, 0.16);
-        padding: 34px 32px; border-radius: 22px; color: #FFFFFF; margin-bottom: 26px;
+        background-color: #BCC484;
+        border: 1.5px solid #9BA45E;
+        box-shadow: 0 12px 28px rgba(127, 142, 71, 0.12);
+        padding: 34px 32px; border-radius: 22px; color: #242B14; margin-bottom: 26px;
     }
-    .hero-banner p, .hero-banner div, .hero-banner h1 { color: #FFFFFF !important; }
     .hero-chip {
-        display: inline-block; background-color: #D6D794; color: #252B16 !important;
-        padding: 4px 12px; border-radius: 8px;
-        font-size: 12px !important; font-weight: 800; letter-spacing: 0.9px; text-transform: uppercase; margin-bottom: 10px;
+        display: inline-block; background-color: #E7E9C8; color: #36401E !important;
+        border: 1px solid #A8B16D; padding: 4px 12px; border-radius: 8px;
+        font-size: 11px !important; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;
     }
-    .hero-heading { font-family: 'Lora', serif !important; font-size: 38px !important; font-weight: 700 !important; color: #FFFFFF !important; margin: 0 !important; line-height: 1.15 !important; }
-    .hero-desc { font-size: 17px !important; color: #F2F4E4 !important; font-weight: 400; margin-top: 10px !important; }
+    .hero-heading { font-family: 'Lora', serif !important; font-size: 38px !important; font-weight: 700 !important; color: #242B14 !important; margin: 0 !important; line-height: 1.15 !important; }
+    .hero-desc { font-size: 17px !important; color: #343D1F !important; font-weight: 500; margin-top: 10px !important; }
     .step-header {
-        display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1px solid rgba(127, 142, 71, 0.25); padding-bottom: 10px; margin-bottom: 14px;
     }
+    .step-left { display: flex; align-items: center; gap: 12px; }
     .step-pill {
-        background-color: #6E7E3E; color: #FFFFFF !important;
+        background-color: #9BA45E; color: #FAFBF2 !important;
         font-size: 11px !important; font-weight: 800; padding: 4px 11px; border-radius: 7px;
         letter-spacing: 0.9px; text-transform: uppercase;
     }
     .step-title {
-        font-family: 'Lora', serif !important; font-size: 23px !important; font-weight: 700 !important; color: #252B16 !important;
+        font-family: 'Lora', serif !important; font-size: 23px !important; font-weight: 700 !important; color: #2C331A !important;
     }
+    .step-ornament { color: #6E7E3E; font-size: 14px; letter-spacing: 3px; opacity: 0.85; }
     div[data-testid="stVerticalBlockBorderWrapper"], div.stVerticalBlockBorderWrapper {
-        background-color: #E6E8B8 !important;
+        background-color: #E6E8C5 !important;
         border-radius: 20px !important;
-        border: 1.5px solid #B6BC73 !important;
-        box-shadow: 0 8px 24px rgba(110, 126, 62, 0.08) !important;
+        border: 1.5px solid #BFC588 !important;
+        box-shadow: 0 8px 22px rgba(127, 142, 71, 0.08) !important;
         padding: 24px 26px !important;
         margin: 16px 0 !important;
     }
     div[data-testid="stVerticalBlockBorderWrapper"] p, div.stVerticalBlockBorderWrapper p {
-        font-size: 18px !important; line-height: 1.75 !important; color: #252B16 !important;
+        font-size: 18px !important; line-height: 1.75 !important; color: #2C331A !important;
     }
     div[role="radiogroup"] label {
-        background-color: #F7F8EE !important; padding: 13px 18px !important; border-radius: 12px !important;
-        border: 1.5px solid #B6BC73 !important; margin-bottom: 10px !important;
+        background-color: #F4F5E7 !important; padding: 13px 18px !important; border-radius: 12px !important;
+        border: 1.5px solid #BFC588 !important; margin-bottom: 10px !important;
         transition: all 0.15s ease;
     }
     div[role="radiogroup"] label:hover {
-        background-color: #D6D794 !important; border-color: #6E7E3E !important;
+        background-color: #DCE0B0 !important; border-color: #8C9650 !important;
     }
     textarea, input[type="text"] {
         font-size: 17px !important; border-radius: 12px !important; padding: 14px !important;
-        background-color: #FCFDF8 !important; border: 1.5px solid #B6BC73 !important; color: #252B16 !important;
+        background-color: #F8F9EF !important; border: 1.5px solid #BFC588 !important; color: #2C331A !important;
     }
     textarea:focus, input[type="text"]:focus {
-        border-color: #6E7E3E !important; background-color: #FFFFFF !important;
-        box-shadow: 0 0 0 3px rgba(110, 126, 62, 0.18) !important;
+        border-color: #7F8E47 !important; background-color: #FCFDF7 !important;
+        box-shadow: 0 0 0 3px rgba(127, 142, 71, 0.14) !important;
     }
     .exam-sheet {
-        background-color: #E6E8B8; padding: 28px; border-radius: 20px; border: 1.5px solid #B6BC73;
-        border-top: 6px solid #6E7E3E;
-        box-shadow: 0 10px 26px rgba(110, 126, 62, 0.1); margin: 26px 0 18px 0; text-align: center;
+        background-color: #E6E8C5; padding: 28px; border-radius: 20px; border: 1.5px solid #BFC588;
+        border-top: 5px solid #8C9650;
+        box-shadow: 0 10px 24px rgba(127, 142, 71, 0.09); margin: 26px 0 18px 0; text-align: center;
     }
-    .exam-sheet h2 { font-family: 'Lora', serif !important; color: #252B16 !important; }
+    .exam-sheet h2 { font-family: 'Lora', serif !important; color: #2C331A !important; }
     .result-badge-card {
-        background-color: #E6E8B8; border: 1.5px solid #6E7E3E; border-radius: 20px;
-        padding: 28px; text-align: center; margin-top: 24px; box-shadow: 0 10px 26px rgba(110, 126, 62, 0.12);
+        background-color: #DCE0B0; border: 1.5px solid #9BA45E; border-radius: 20px;
+        padding: 28px; text-align: center; margin-top: 24px; box-shadow: 0 10px 24px rgba(127, 142, 71, 0.1);
     }
-    .result-score { font-family: 'Lora', serif !important; font-size: 72px !important; font-weight: 700 !important; color: #4D5929; line-height: 1.1 !important; }
+    .result-score { font-family: 'Lora', serif !important; font-size: 72px !important; font-weight: 700 !important; color: #4A5627; line-height: 1.1 !important; }
     section.main div.stButton > button {
-        background-color: #6E7E3E !important; color: #FFFFFF !important; font-size: 17px !important; font-weight: 700 !important;
-        padding: 12px 22px !important; border-radius: 12px !important; border: 1px solid #56642E !important;
-        box-shadow: 0 4px 12px rgba(110, 126, 62, 0.2) !important; width: 100%; margin-top: 6px !important; transition: all 0.15s ease;
+        background-color: #7F8E47 !important; color: #FAFBF2 !important; font-size: 17px !important; font-weight: 700 !important;
+        padding: 12px 22px !important; border-radius: 12px !important; border: 1px solid #6B7939 !important;
+        box-shadow: 0 4px 12px rgba(127, 142, 71, 0.16) !important; width: 100%; margin-top: 6px !important; transition: all 0.15s ease;
     }
     section.main div.stButton > button:hover {
-        background-color: #5B6931 !important; transform: translateY(-1px);
+        background-color: #6E7E3E !important; transform: translateY(-1px);
     }
-    section.main div.stButton > button p { color: #FFFFFF !important; font-weight: 700 !important; }
+    section.main div.stButton > button p { color: #FAFBF2 !important; font-weight: 700 !important; }
     section[data-testid="stSidebar"] div.stButton > button {
-        background-color: #F7F8EE !important; color: #252B16 !important;
+        background-color: #F4F5E7 !important; color: #2C331A !important;
         font-size: 16px !important; font-weight: 600 !important; padding: 9px 14px !important;
-        border-radius: 10px !important; border: 1px solid #C2C78E !important;
+        border-radius: 10px !important; border: 1px solid #C5CA92 !important;
         box-shadow: none !important; text-align: left !important; justify-content: flex-start !important;
         margin-top: 4px !important; margin-bottom: 4px !important; width: 100%; transition: 0.15s;
     }
-    section[data-testid="stSidebar"] div.stButton > button p { color: #252B16 !important; }
+    section[data-testid="stSidebar"] div.stButton > button p { color: #2C331A !important; }
     section[data-testid="stSidebar"] div.stButton > button:hover {
-        background-color: #D6D794 !important; border-color: #6E7E3E !important;
+        background-color: #DCE0B0 !important; border-color: #8C9650 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -355,9 +368,10 @@ if st.session_state.active_notebook:
     nb_title = st.session_state.active_notebook
     st.markdown(f"""
         <div class="hero-banner" translate="no">
-            <div class="hero-chip">Личная тетрадь</div>
+            <span class="hero-chip">❖ Личная тетрадь</span>
             <div class="hero-heading">{nb_title}</div>
             <div class="hero-desc">Все твои сохранённые конспекты по этому предмету. Нажми на любую тему, чтобы повторить материал.</div>
+            <div class="ornament-line"><span class="bar"></span><span>✧ ❖ ✧</span><span class="bar"></span></div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -366,7 +380,7 @@ if st.session_state.active_notebook:
         st.info("В этой тетради пока пусто. Перейди на «Новый конспект», создай материал и нажми «Сохранить в тетрадь».")
     else:
         for idx, note in enumerate(saved_notes):
-            with st.expander(f"{note.get('topic', 'Без названия')}  ·  {note.get('date', '')}"):
+            with st.expander(f"❖  {note.get('topic', 'Без названия')}  ·  {note.get('date', '')}"):
                 st.markdown(note.get("content", ""))
                 if st.button("Удалить этот конспект", key=f"del_{nb_title}_{idx}"):
                     updated_list = list(saved_notes)
@@ -378,16 +392,17 @@ if st.session_state.active_notebook:
 
 st.markdown(f"""
     <div class="hero-banner" translate="no">
-        <div class="hero-chip">Smart Study Assistant</div>
+        <span class="hero-chip">❖ Smart Study Workspace</span>
         <div class="hero-heading">StudyBox</div>
         <div class="hero-desc">Привет, <b>{st.session_state.current_user}</b>! Вставь параграф или загрузи фото страницы учебника — я соберу понятный конспект и проверю твои знания.</div>
+        <div class="ornament-line"><span class="bar"></span><span>✧ ❖ ✧</span><span class="bar"></span></div>
     </div>
 """, unsafe_allow_html=True)
 
 with st.container(border=True):
     col_sec1, col_clr = st.columns((3, 1))
     with col_sec1:
-        st.markdown('<div class="step-header"><span class="step-pill">Шаг 01</span><span class="step-title">Материал из учебника</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header"><div class="step-left"><span class="step-pill">Шаг 01</span><span class="step-title">Материал из учебника</span></div><span class="step-ornament">✧ ❖</span></div>', unsafe_allow_html=True)
     with col_clr:
         if st.button("Очистить", key="clear_text_btn"):
             st.session_state.source_text = ""
@@ -423,7 +438,7 @@ with st.container(border=True):
         text = st.text_area("Поле для текста:", value=st.session_state.source_text, height=180, placeholder="Вставь сюда любой параграф по истории, географии, математике, биологии или физике...", label_visibility="collapsed")
         st.session_state.source_text = text
 with st.container(border=True):
-    st.markdown('<div class="step-header"><span class="step-pill">Шаг 02</span><span class="step-title">Формат конспекта</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-header"><div class="step-left"><span class="step-pill">Шаг 02</span><span class="step-title">Формат конспекта</span></div><span class="step-ornament">✧ ❖</span></div>', unsafe_allow_html=True)
     mode = st.radio(
         "Формат:",
         (
@@ -462,7 +477,7 @@ with st.container(border=True):
 
 if st.session_state.adapted_text:
     with st.container(border=True):
-        st.markdown('<div class="step-header"><span class="step-pill">Шаг 03</span><span class="step-title">Готовый материал</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header"><div class="step-left"><span class="step-pill">Шаг 03</span><span class="step-title">Готовый материал</span></div><span class="step-ornament">✧ ❖</span></div>', unsafe_allow_html=True)
         st.markdown(st.session_state.adapted_text)
 
         with st.expander("Сохранить этот конспект в тетрадь"):
@@ -500,7 +515,7 @@ if st.session_state.adapted_text:
 
 if st.session_state.show_quiz and st.session_state.quiz_data:
     qd = st.session_state.quiz_data
-    st.markdown('<div class="exam-sheet"><span class="sticker-tag">Проверка знаний</span><h2 style="margin:8px 0 0 0; font-weight:700;">Контрольная работа</h2><p style="margin-top:6px; color:#252B16;">Ответь на вопросы, соедини пары и напиши мини-эссе</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="exam-sheet"><span class="sticker-tag">❖ Проверка знаний</span><h2 style="margin:8px 0 0 0; font-weight:700;">Контрольная работа</h2><p style="margin-top:6px; color:#343D1F;">Ответь на вопросы, соедини пары и напиши мини-эссе</p><div class="ornament-line"><span class="bar"></span><span>✧ ❖ ✧</span><span class="bar"></span></div></div>', unsafe_allow_html=True)
     with st.form("control_work_form"):
         ans1 = st.radio(f"1. {qd.get('q1').get('question')}", qd.get('q1').get('options'), key="r1")
         ans2 = st.radio(f"2. {qd.get('q2').get('question')}", qd.get('q2').get('options'), key="r2")
@@ -536,7 +551,7 @@ if st.session_state.show_quiz and st.session_state.quiz_data:
 
 if st.session_state.grade_result:
     gr = st.session_state.grade_result
-    st.markdown(f'<div class="result-badge-card"><span class="sticker-tag">Результат</span><div style="color:#252B16; font-weight:800; font-size:14px; letter-spacing:1px; text-transform:uppercase; margin-top:10px;">Оценка за работу</div><div class="result-score">{gr.get("grade")} / 10</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="result-badge-card"><span class="sticker-tag">❖ Результат</span><div style="color:#343D1F; font-weight:800; font-size:14px; letter-spacing:1px; text-transform:uppercase; margin-top:10px;">Оценка за работу</div><div class="result-score">{gr.get("grade")} / 10</div><div class="ornament-line"><span class="bar"></span><span>✧ ❖ ✧</span><span class="bar"></span></div></div>', unsafe_allow_html=True)
     with st.container(border=True):
         st.markdown(gr.get("feedback"))
     if st.button("Закрыть разбор", key="close_grade_btn"):
